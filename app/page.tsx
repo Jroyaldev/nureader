@@ -1,101 +1,96 @@
-import Image from "next/image";
+'use client';
+
+import { useState } from 'react';
+import EPUBReader from './components/EPUBReader';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [file, setFile] = useState<File | null>(null);
+  const [aiInsights, setAiInsights] = useState<string[]>([]);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const handleHighlight = (text: string) => {
+    // TODO: Implement AI analysis of highlighted text
+    setAiInsights(prev => [...prev, `Analysis of: ${text}`]);
+  };
+
+  return (
+    <main className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="fixed top-0 w-full bg-background/80 backdrop-blur-xl border-b border-border/50 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <h1 className="text-2xl font-medium text-foreground">nuReader</h1>
+          <nav className="flex items-center space-x-4">
+            <button className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80 rounded-full transition-colors">
+              Library
+            </button>
+            <button className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80 rounded-full transition-colors">
+              Settings
+            </button>
+          </nav>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </header>
+
+      {/* Main content */}
+      <div className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        {!file ? (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] border-2 border-dashed border-border rounded-2xl bg-background p-8">
+            <div className="text-center max-w-md">
+              <h2 className="text-xl font-medium text-foreground mb-3">
+                Welcome to nuReader
+              </h2>
+              <p className="text-muted-foreground mb-6">
+                Drop your EPUB file here or click to browse. Experience reading with AI-powered insights and beautiful typography.
+              </p>
+              <label className="btn-primary cursor-pointer">
+                <span>Choose EPUB</span>
+                <input
+                  type="file"
+                  accept=".epub"
+                  className="hidden"
+                  onChange={(e) => {
+                    const selectedFile = e.target.files?.[0];
+                    if (selectedFile) setFile(selectedFile);
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Reader area */}
+            <div className="lg:col-span-8 bg-background rounded-2xl p-8 shadow-sm">
+              <EPUBReader file={file} onHighlight={handleHighlight} />
+            </div>
+
+            {/* AI Insights sidebar */}
+            <div className="lg:col-span-4">
+              <div className="sticky top-24">
+                <div className="bg-background rounded-2xl p-6 shadow-sm">
+                  <h3 className="text-lg font-medium text-foreground mb-4">
+                    AI Insights
+                  </h3>
+                  <div className="space-y-4">
+                    {aiInsights.length > 0 ? (
+                      aiInsights.map((insight, index) => (
+                        <div key={index} className="p-4 bg-muted/50 rounded-xl">
+                          <p className="text-sm text-muted-foreground">
+                            {insight}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-4 bg-muted/50 rounded-xl">
+                        <p className="text-sm text-muted-foreground">
+                          AI analysis and highlights will appear here as you read.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
   );
 }

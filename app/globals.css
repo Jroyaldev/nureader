@@ -2,20 +2,97 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: 245 245 247;
+    --foreground: 28 28 46;
+    
+    --primary: 77 117 255;
+    --primary-foreground: 255 255 255;
+    
+    --muted: 227 227 232;
+    --muted-foreground: 110 110 132;
+    
+    --border: 227 227 232;
+  }
+
+  .dark {
+    --background: 28 28 30;
+    --foreground: 245 245 247;
+    
+    --primary: 77 117 255;
+    --primary-foreground: 255 255 255;
+    
+    --muted: 44 44 46;
+    --muted-foreground: 169 169 182;
+    
+    --border: 44 44 46;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01" 1, "ss02" 1, "cv01" 1, "cv02" 1, "cv03" 1, "cv04" 1;
+  }
+
+  /* Typography */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-medium tracking-tight;
+  }
+
+  /* Reader styles */
+  .epub-container {
+    @apply min-h-[calc(100vh-16rem)] bg-white dark:bg-[#2C2C2E] rounded-xl overflow-hidden;
+  }
+
+  .epub-container iframe {
+    @apply w-full h-full;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-200 dark:bg-gray-700 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-300 dark:bg-gray-600;
+  }
+}
+
+/* Modern form elements */
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-full 
+           bg-primary text-primary-foreground font-medium
+           hover:opacity-90 transition-opacity
+           focus:outline-none focus:ring-2 focus:ring-primary/20;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-full
+           bg-muted text-muted-foreground font-medium
+           hover:bg-muted/80 transition-colors
+           focus:outline-none focus:ring-2 focus:ring-muted/20;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 rounded-xl
+           bg-white dark:bg-[#2C2C2E]
+           border border-gray-200 dark:border-gray-800
+           focus:outline-none focus:ring-2 focus:ring-primary/20
+           placeholder:text-gray-400 dark:placeholder:text-gray-600;
+  }
 }
