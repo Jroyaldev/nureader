@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import JSZip from 'jszip';
 import {
   IoChevronBack,
@@ -10,7 +10,19 @@ import {
   IoSearch,
   IoSunny,
   IoMoon,
-  IoClose
+  IoClose,
+  IoSettings,
+  IoExpand,
+  IoContract,
+  IoPlay,
+  IoPause,
+  IoVolumeHigh,
+  IoText,
+  IoColorPalette,
+  IoEye,
+  IoBookmarkOutline,
+  IoFastFood,
+  IoNotifications
 } from 'react-icons/io5';
 import { DOMParser, XMLSerializer } from 'xmldom';
 import debounce from 'lodash.debounce';
@@ -29,6 +41,8 @@ interface EPUBChapter {
   subtitle?: string;
   level: number;
   content: string;
+  wordCount: number;
+  estimatedReadTime: number;
 }
 
 interface EPUBResource {
@@ -38,206 +52,413 @@ interface EPUBResource {
   data: string;
 }
 
+interface BookmarkWithNote {
+  chapterIndex: number;
+  position: number;
+  note: string;
+  category: string;
+  createdAt: number;
+  id: string;
+}
+
+interface ReadingSettings {
+  fontSize: number;
+  fontFamily: string;
+  lineHeight: number;
+  letterSpacing: number;
+  columnWidth: number;
+  marginSize: number;
+  pageLayout: 'single' | 'double' | 'continuous';
+  readingMode: 'normal' | 'focus' | 'immersive';
+  theme: 'light' | 'dark' | 'sepia';
+  backgroundMusic: boolean;
+  autoPageTurn: boolean;
+  readingGoal: number;
+}
+
+interface ReadingProgress {
+  currentChapter: number;
+  currentPage: number;
+  totalPages: number;
+  overallProgress: number;
+  timeSpent: number;
+  wordsRead: number;
+  sessionsToday: number;
+  streak: number;
+}
+
 /**
- * ControlsBar: Displays the top controls (TOC, bookmarks, search, etc.).
+ * Enhanced Controls Bar with more intuitive grouping and animations
  */
 const ControlsBar = ({
   onToggleTOC,
   onToggleBookmarks,
   onToggleSearch,
-  onToggleTheme,
-  theme,
-  onIncreaseFont,
-  onDecreaseFont,
+  onToggleSettings,
+  onToggleFullscreen,
+  onToggleReadingMode,
+  settings,
+  onUpdateSettings,
   isLoading,
   currentChapter,
-  chapters
+  chapters,
+  isFullscreen,
+  progress
 }: {
   onToggleTOC: () => void;
   onToggleBookmarks: () => void;
   onToggleSearch: () => void;
-  onToggleTheme: () => void;
-  theme: 'light' | 'dark';
-  onIncreaseFont: () => void;
-  onDecreaseFont: () => void;
+  onToggleSettings: () => void;
+  onToggleFullscreen: () => void;
+  onToggleReadingMode: () => void;
+  settings: ReadingSettings;
+  onUpdateSettings: (settings: Partial<ReadingSettings>) => void;
   isLoading: boolean;
   currentChapter: number;
   chapters: EPUBChapter[];
+  isFullscreen: boolean;
+  progress: ReadingProgress;
 }) => (
-  <div className="flex items-center justify-between mb-4 px-4">
-    {/* Left Controls: TOC, Bookmarks */}
+  <div className={classNames(
+    'flex items-center justify-between px-6 py-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-200/50 dark:border-gray-700/50 transition-all duration-300',
+    {
+      'bg-transparent border-transparent': settings.readingMode === 'immersive'
+    }
+  )}>
+    {/* Left Controls: Navigation */}
     <div className="flex items-center gap-2">
       <button
         onClick={onToggleTOC}
-        className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        className="control-button group"
         aria-label="Table of Contents"
       >
-        <IoMenuOutline className="w-6 h-6 text-gray-800 dark:text-gray-200" />
+        <IoMenuOutline className="w-5 h-5 transition-transform group-hover:scale-110" />
       </button>
       <button
         onClick={onToggleBookmarks}
-        className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        className="control-button group"
         aria-label="Bookmarks"
       >
-        <IoBookmark className="w-6 h-6 text-gray-800 dark:text-gray-200" />
+        <IoBookmark className="w-5 h-5 transition-transform group-hover:scale-110" />
+      </button>
+      <button
+        onClick={onToggleSearch}
+        className="control-button group"
+        aria-label="Search"
+      >
+        <IoSearch className="w-5 h-5 transition-transform group-hover:scale-110" />
       </button>
     </div>
 
-    {/* Middle: Chapter Title */}
-    <div className="text-center flex-1 mx-4">
-      <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
+    {/* Center: Chapter Info with Progress */}
+    <div className="flex-1 mx-8 text-center">
+      <div className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
         {isLoading ? 'Loading...' : chapters[currentChapter]?.title || `Chapter ${currentChapter + 1}`}
+      </div>
+      <div className="text-xs text-gray-500 dark:text-gray-400">
+        {!isLoading && chapters[currentChapter] && (
+          <>
+            {chapters[currentChapter].estimatedReadTime} min read • 
+            {Math.round(progress.overallProgress)}% complete
+          </>
+        )}
       </div>
     </div>
 
-    {/* Right Controls: Search, Theme Toggle, Font Size */}
+    {/* Right Controls: Settings & Modes */}
     <div className="flex items-center gap-2">
       <button
-        onClick={onToggleSearch}
-        className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-        aria-label="Search"
-      >
-        <IoSearch className="w-6 h-6 text-gray-800 dark:text-gray-200" />
-      </button>
-      <button
-        onClick={onToggleTheme}
-        className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        onClick={() => onUpdateSettings({ theme: settings.theme === 'light' ? 'dark' : settings.theme === 'dark' ? 'sepia' : 'light' })}
+        className="control-button group"
         aria-label="Toggle Theme"
       >
-        {theme === 'light' ? (
-          <IoMoon className="w-6 h-6 text-gray-800 dark:text-gray-200" />
+        {settings.theme === 'light' ? (
+          <IoMoon className="w-5 h-5 transition-transform group-hover:scale-110" />
+        ) : settings.theme === 'dark' ? (
+          <IoColorPalette className="w-5 h-5 transition-transform group-hover:scale-110" />
         ) : (
-          <IoSunny className="w-6 h-6 text-gray-800 dark:text-gray-200" />
+          <IoSunny className="w-5 h-5 transition-transform group-hover:scale-110" />
         )}
       </button>
       <button
-        onClick={onIncreaseFont}
-        className="px-3 py-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-        aria-label="Increase Font Size"
+        onClick={onToggleReadingMode}
+        className="control-button group"
+        aria-label="Toggle Reading Mode"
       >
-        A+
+        <IoEye className="w-5 h-5 transition-transform group-hover:scale-110" />
       </button>
       <button
-        onClick={onDecreaseFont}
-        className="px-3 py-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-        aria-label="Decrease Font Size"
+        onClick={onToggleFullscreen}
+        className="control-button group"
+        aria-label="Toggle Fullscreen"
       >
-        A-
+        {isFullscreen ? (
+          <IoContract className="w-5 h-5 transition-transform group-hover:scale-110" />
+        ) : (
+          <IoExpand className="w-5 h-5 transition-transform group-hover:scale-110" />
+        )}
+      </button>
+      <button
+        onClick={onToggleSettings}
+        className="control-button group"
+        aria-label="Settings"
+      >
+        <IoSettings className="w-5 h-5 transition-transform group-hover:scale-110" />
       </button>
     </div>
   </div>
 );
 
 /**
- * Modal: Generic modal wrapper for content, used by TOC, Bookmarks, and Search.
+ * Enhanced Modal with better animations and accessibility
  */
 const Modal = ({
   title,
   onClose,
-  children
+  children,
+  size = 'medium'
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
-}) => (
-  <div className="fixed inset-0 bg-black bg-opacity-40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col">
-      {/* Modal Header */}
-      <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-        <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-        <button
-          onClick={onClose}
-          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-          aria-label="Close"
-        >
-          <IoClose className="w-6 h-6" />
-        </button>
-      </div>
+  size?: 'small' | 'medium' | 'large' | 'full';
+}) => {
+  const sizeClasses = {
+    small: 'max-w-md',
+    medium: 'max-w-2xl',
+    large: 'max-w-4xl',
+    full: 'max-w-7xl'
+  };
 
-      {/* Modal Content */}
-      <div className="overflow-auto flex-1 p-6">{children}</div>
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className={classNames(
+        'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300',
+        sizeClasses[size]
+      )}>
+        {/* Modal Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            aria-label="Close"
+          >
+            <IoClose className="w-6 h-6" />
+          </button>
+        </div>
+
+        {/* Modal Content */}
+        <div className="overflow-auto flex-1 p-6">{children}</div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 /**
- * TOCModal: Displays the Table of Contents for the chapters, 
- * allowing the user to select which chapter to jump to.
+ * Enhanced TOC with chapter previews and better navigation
  */
 const TOCModal = ({
   chapters,
   currentChapter,
   onSelect,
-  onClose
+  onClose,
+  progress
 }: {
   chapters: EPUBChapter[];
   currentChapter: number;
   onSelect: (index: number) => void;
   onClose: () => void;
+  progress: ReadingProgress;
 }) => (
-  <Modal title="Contents" onClose={onClose}>
-    <ul className="space-y-2">
+  <Modal title="Table of Contents" onClose={onClose} size="large">
+    <div className="grid gap-4">
       {chapters.map((chapter, index) => (
-        <li key={chapter.id} className={`ml-${chapter.level * 4}`}>
-          <button
-            onClick={() => onSelect(index)}
-            className={classNames(
-              'w-full text-left p-2 rounded-md',
-              {
-                'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300':
-                  index === currentChapter
-              },
-              'hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
-            )}
-          >
-            <div className="font-medium">{chapter.title}</div>
-            {chapter.subtitle && (
-              <div className="text-sm text-gray-600 dark:text-gray-400">{chapter.subtitle}</div>
-            )}
-          </button>
-        </li>
+        <div
+          key={chapter.id}
+          className={classNames(
+            'group relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200',
+            {
+              'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20': index === currentChapter,
+              'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600': index !== currentChapter
+            }
+          )}
+          onClick={() => onSelect(index)}
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <div className={classNames(
+                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium',
+                  {
+                    'bg-blue-600 text-white': index === currentChapter,
+                    'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300': index !== currentChapter
+                  }
+                )}>
+                  {index + 1}
+                </div>
+                <div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                    {chapter.title}
+                  </div>
+                  {chapter.subtitle && (
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      {chapter.subtitle}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-4">
+                <span>{chapter.wordCount.toLocaleString()} words</span>
+                <span>{chapter.estimatedReadTime} min read</span>
+                {index < currentChapter && (
+                  <span className="text-green-600 dark:text-green-400 font-medium">✓ Complete</span>
+                )}
+                {index === currentChapter && (
+                  <span className="text-blue-600 dark:text-blue-400 font-medium">Currently reading</span>
+                )}
+              </div>
+            </div>
+            <div className="ml-4">
+              {index <= currentChapter && (
+                <div className="w-12 h-12 rounded-full border-4 border-gray-200 dark:border-gray-700 relative">
+                  <div 
+                    className="absolute inset-0 rounded-full border-4 border-blue-600 transition-all duration-300"
+                    style={{
+                      clipPath: index === currentChapter 
+                        ? `polygon(0 0, ${Math.min(100, Math.max(0, progress.overallProgress))}% 0, ${Math.min(100, Math.max(0, progress.overallProgress))}% 100%, 0 100%)` 
+                        : 'polygon(0 0, 100% 0, 100% 100%, 0 100%)'
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       ))}
-    </ul>
+    </div>
   </Modal>
 );
 
 /**
- * BookmarksModal: Displays the user's bookmarked chapters.
+ * Advanced Bookmarks with categories and notes
  */
 const BookmarksModal = ({
   bookmarks,
   chapters,
   onSelect,
+  onDelete,
+  onUpdateNote,
+  onUpdateCategory,
   onClose
 }: {
-  bookmarks: number[];
+  bookmarks: BookmarkWithNote[];
   chapters: EPUBChapter[];
-  onSelect: (index: number) => void;
+  onSelect: (chapterIndex: number, position: number) => void;
+  onDelete: (bookmarkId: string) => void;
+  onUpdateNote: (bookmarkId: string, note: string) => void;
+  onUpdateCategory: (bookmarkId: string, category: string) => void;
   onClose: () => void;
-}) => (
-  <Modal title="Bookmarks" onClose={onClose}>
-    {bookmarks.length === 0 ? (
-      <div className="text-center text-gray-600 dark:text-gray-400">No bookmarks added.</div>
-    ) : (
-      <ul className="space-y-2">
-        {bookmarks.map((chapterIndex) => (
-          <li key={chapterIndex}>
-            <button
-              onClick={() => onSelect(chapterIndex)}
-              className="w-full text-left p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              {chapters[chapterIndex]?.title || `Chapter ${chapterIndex + 1}`}
-            </button>
-          </li>
-        ))}
-      </ul>
-    )}
-  </Modal>
-);
+}) => {
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [editingBookmark, setEditingBookmark] = useState<string | null>(null);
+  
+  const categories = ['all', ...Array.from(new Set(bookmarks.map(b => b.category).filter(Boolean)))];
+  const filteredBookmarks = selectedCategory === 'all' 
+    ? bookmarks 
+    : bookmarks.filter(b => b.category === selectedCategory);
+
+  return (
+    <Modal title="Bookmarks" onClose={onClose} size="large">
+      {bookmarks.length === 0 ? (
+        <div className="text-center py-12">
+          <IoBookmarkOutline className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+          <div className="text-gray-500 dark:text-gray-400">No bookmarks added yet.</div>
+          <div className="text-sm text-gray-400 dark:text-gray-500 mt-2">
+            Click the bookmark button while reading to save your place.
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Category Filter */}
+          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+            {categories.map(category => (
+              <button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                className={classNames(
+                  'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
+                  {
+                    'bg-blue-600 text-white': selectedCategory === category,
+                    'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600': selectedCategory !== category
+                  }
+                )}
+              >
+                {category === 'all' ? 'All' : category || 'Uncategorized'} 
+                ({category === 'all' ? bookmarks.length : bookmarks.filter(b => b.category === category).length})
+              </button>
+            ))}
+          </div>
+
+          {/* Bookmarks List */}
+          <div className="space-y-4">
+            {filteredBookmarks.map((bookmark) => (
+              <div
+                key={bookmark.id}
+                className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <button
+                    onClick={() => onSelect(bookmark.chapterIndex, bookmark.position)}
+                    className="flex-1 text-left"
+                  >
+                    <div className="font-medium text-gray-900 dark:text-gray-100 mb-1">
+                      {chapters[bookmark.chapterIndex]?.title || `Chapter ${bookmark.chapterIndex + 1}`}
+                    </div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      {new Date(bookmark.createdAt).toLocaleDateString()} • 
+                      Position {bookmark.position}%
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => onDelete(bookmark.id)}
+                    className="text-gray-400 hover:text-red-600 transition-colors p-1"
+                    aria-label="Delete bookmark"
+                  >
+                    <IoClose className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                {/* Category and Note */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={bookmark.category || ''}
+                      onChange={(e) => onUpdateCategory(bookmark.id, e.target.value)}
+                      placeholder="Category..."
+                      className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <textarea
+                    value={bookmark.note || ''}
+                    onChange={(e) => onUpdateNote(bookmark.id, e.target.value)}
+                    placeholder="Add a note about this bookmark..."
+                    className="w-full text-sm p-2 rounded bg-gray-100 dark:bg-gray-700 border-none resize-none focus:ring-2 focus:ring-blue-500"
+                    rows={2}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+};
 
 /**
- * SearchModal: Allows users to search across all chapters for a query,
- * displays a snippet, and lets them jump to the result.
+ * Enhanced Search with instant results and better highlighting
  */
 const SearchModal = ({
   query,
@@ -246,330 +467,754 @@ const SearchModal = ({
   currentIndex,
   onNavigate,
   onSelect,
-  onClose
+  onClose,
+  isSearching
 }: {
   query: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  results: { chapterIndex: number; snippet: string }[];
+  results: { chapterIndex: number; snippet: string; position: number }[];
   currentIndex: number;
   onNavigate: (direction: 'next' | 'prev') => void;
-  onSelect: (index: number) => void;
+  onSelect: (chapterIndex: number, position: number) => void;
   onClose: () => void;
+  isSearching: boolean;
 }) => (
-  <Modal title="Search" onClose={onClose}>
-    <div className="flex flex-col h-full">
+  <Modal title="Search" onClose={onClose} size="large">
+    <div className="space-y-6">
       {/* Search Input */}
-      <div className="mb-4">
+      <div className="relative">
         <input
           type="text"
           value={query}
           onChange={onChange}
-          placeholder="Enter search query..."
-          className="w-full px-4 py-2 rounded-md border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
+          placeholder="Search for text, quotes, or concepts..."
+          className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 pr-10"
+          autoFocus
         />
+        {isSearching && (
+          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
       </div>
 
       {/* Search Results */}
-      {results.length > 0 ? (
+      {query && !isSearching && (
         <>
-          {/* Navigation Controls */}
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => onNavigate('prev')}
-              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-              aria-label="Previous Result"
-            >
-              &#8592;
-            </button>
-            <span className="text-gray-800 dark:text-gray-200">
-              {currentIndex + 1} / {results.length}
-            </span>
-            <button
-              onClick={() => onNavigate('next')}
-              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-              aria-label="Next Result"
-            >
-              &#8594;
-            </button>
-          </div>
+          {results.length > 0 ? (
+            <>
+              {/* Results Summary */}
+              <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                <span>{results.length} results found</span>
+                {results.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => onNavigate('prev')}
+                      className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      aria-label="Previous Result"
+                    >
+                      <IoChevronBack className="w-4 h-4" />
+                    </button>
+                    <span>{currentIndex + 1} of {results.length}</span>
+                    <button
+                      onClick={() => onNavigate('next')}
+                      className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      aria-label="Next Result"
+                    >
+                      <IoChevronForward className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
 
-          {/* Results List */}
-          <div className="flex-1 overflow-auto">
-            <ul className="space-y-4">
-              {results.map((result, index) => (
-                <li
-                  key={index}
-                  className={classNames(
-                    'p-2 rounded-md',
-                    {
-                      'bg-blue-100 dark:bg-blue-900': index === currentIndex
-                    },
-                    'hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
-                  )}
-                >
-                  <button
-                    onClick={() => onSelect(result.chapterIndex)}
-                    className="w-full text-left"
+              {/* Results List */}
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {results.map((result, index) => (
+                  <div
+                    key={index}
+                    className={classNames(
+                      'p-4 rounded-xl cursor-pointer transition-all duration-200',
+                      {
+                        'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800': index === currentIndex,
+                        'bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800': index !== currentIndex
+                      }
+                    )}
+                    onClick={() => onSelect(result.chapterIndex, result.position)}
                   >
-                    <div
-                      className="font-medium text-gray-800 dark:text-gray-200"
-                      // Render the snippet with <mark> tags
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                      Chapter {result.chapterIndex + 1} • Position {result.position}%
+                    </div>
+                    <div 
+                      className="text-gray-900 dark:text-gray-100 leading-relaxed"
                       dangerouslySetInnerHTML={{ __html: result.snippet }}
                     />
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                      Chapter {result.chapterIndex + 1}
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-8">
+              <IoSearch className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <div className="text-gray-500 dark:text-gray-400">No results found for "{query}"</div>
+              <div className="text-sm text-gray-400 dark:text-gray-500 mt-2">
+                Try different keywords or check your spelling.
+              </div>
+            </div>
+          )}
         </>
-      ) : (
-        <div className="text-center text-gray-600 dark:text-gray-400">No results found.</div>
       )}
     </div>
   </Modal>
 );
 
 /**
- * ProgressBar: Shows reading progress based on the current chapter index.
+ * Settings Modal with comprehensive reading customization
  */
-const ProgressBar = ({ progress }: { progress: number }) => (
-  <div className="mt-4 px-4">
-    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1">
-      <div
-        className="bg-blue-600 h-1 rounded-full transition-all duration-300"
-        style={{ width: `${progress}%` }}
-      />
+const SettingsModal = ({
+  settings,
+  onUpdateSettings,
+  onClose
+}: {
+  settings: ReadingSettings;
+  onUpdateSettings: (settings: Partial<ReadingSettings>) => void;
+  onClose: () => void;
+}) => (
+  <Modal title="Reading Settings" onClose={onClose} size="large">
+    <div className="space-y-8">
+      {/* Typography Settings */}
+      <div>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Typography</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Font Size: {settings.fontSize}px
+            </label>
+            <input
+              type="range"
+              min="12"
+              max="32"
+              value={settings.fontSize}
+              onChange={(e) => onUpdateSettings({ fontSize: parseInt(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Font Family
+            </label>
+            <select
+              value={settings.fontFamily}
+              onChange={(e) => onUpdateSettings({ fontFamily: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            >
+              <option value="serif">Serif (Traditional)</option>
+              <option value="sans-serif">Sans-serif (Modern)</option>
+              <option value="monospace">Monospace (Code)</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Times New Roman">Times New Roman</option>
+              <option value="Arial">Arial</option>
+              <option value="Helvetica">Helvetica</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Line Height: {settings.lineHeight}
+            </label>
+            <input
+              type="range"
+              min="1.2"
+              max="2.5"
+              step="0.1"
+              value={settings.lineHeight}
+              onChange={(e) => onUpdateSettings({ lineHeight: parseFloat(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Letter Spacing: {settings.letterSpacing}px
+            </label>
+            <input
+              type="range"
+              min="-1"
+              max="3"
+              step="0.5"
+              value={settings.letterSpacing}
+              onChange={(e) => onUpdateSettings({ letterSpacing: parseFloat(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Layout Settings */}
+      <div>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Layout</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Page Layout
+            </label>
+            <div className="flex gap-2">
+              {(['single', 'double', 'continuous'] as const).map(layout => (
+                <button
+                  key={layout}
+                  onClick={() => onUpdateSettings({ pageLayout: layout })}
+                  className={classNames(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    {
+                      'bg-blue-600 text-white': settings.pageLayout === layout,
+                      'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300': settings.pageLayout !== layout
+                    }
+                  )}
+                >
+                  {layout === 'single' ? 'Single Page' : layout === 'double' ? 'Double Page' : 'Continuous'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Reading Mode
+            </label>
+            <div className="flex gap-2">
+              {(['normal', 'focus', 'immersive'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => onUpdateSettings({ readingMode: mode })}
+                  className={classNames(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    {
+                      'bg-blue-600 text-white': settings.readingMode === mode,
+                      'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300': settings.readingMode !== mode
+                    }
+                  )}
+                >
+                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Margin Size: {settings.marginSize}px
+            </label>
+            <input
+              type="range"
+              min="20"
+              max="120"
+              step="10"
+              value={settings.marginSize}
+              onChange={(e) => onUpdateSettings({ marginSize: parseInt(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Column Width: {settings.columnWidth}ch
+            </label>
+            <input
+              type="range"
+              min="45"
+              max="85"
+              step="5"
+              value={settings.columnWidth}
+              onChange={(e) => onUpdateSettings({ columnWidth: parseInt(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Theme Settings */}
+      <div>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Theme</h3>
+        <div className="flex gap-4">
+          {(['light', 'dark', 'sepia'] as const).map(theme => (
+            <button
+              key={theme}
+              onClick={() => onUpdateSettings({ theme })}
+              className={classNames(
+                'flex-1 p-4 rounded-xl border-2 transition-all duration-200',
+                {
+                  'border-blue-600': settings.theme === theme,
+                  'border-gray-200 dark:border-gray-700': settings.theme !== theme
+                }
+              )}
+            >
+              <div className={classNames(
+                'w-full h-16 rounded-lg mb-2',
+                {
+                  'bg-white border border-gray-200': theme === 'light',
+                  'bg-gray-900': theme === 'dark',
+                  'bg-amber-50': theme === 'sepia'
+                }
+              )} />
+              <div className="text-sm font-medium capitalize">{theme}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Advanced Features */}
+      <div>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Advanced Features</h3>
+        <div className="space-y-4">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={settings.autoPageTurn}
+              onChange={(e) => onUpdateSettings({ autoPageTurn: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Auto page turn (experimental)
+            </span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={settings.backgroundMusic}
+              onChange={(e) => onUpdateSettings({ backgroundMusic: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Background ambient sounds
+            </span>
+          </label>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Daily Reading Goal: {settings.readingGoal} minutes
+            </label>
+            <input
+              type="range"
+              min="5"
+              max="180"
+              step="5"
+              value={settings.readingGoal}
+              onChange={(e) => onUpdateSettings({ readingGoal: parseInt(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  </Modal>
+);
+
+/**
+ * Enhanced Progress Bar with detailed statistics
+ */
+const ProgressBar = ({ 
+  progress, 
+  settings,
+  onToggleStats 
+}: { 
+  progress: ReadingProgress;
+  settings: ReadingSettings;
+  onToggleStats: () => void;
+}) => (
+  <div className={classNames(
+    'px-6 py-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-t border-gray-200/50 dark:border-gray-700/50 transition-all duration-300',
+    {
+      'bg-transparent border-transparent': settings.readingMode === 'immersive'
+    }
+  )}>
+    <div className="flex items-center justify-between mb-3">
+      <div className="text-sm text-gray-600 dark:text-gray-400">
+        Chapter {progress.currentChapter + 1} • Page {progress.currentPage} of {progress.totalPages}
+      </div>
+      <button
+        onClick={onToggleStats}
+        className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+      >
+        View Stats
+      </button>
+    </div>
+    <div className="relative">
+      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+        <div
+          className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
+          style={{ width: `${progress.overallProgress}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
+        <span>{Math.round(progress.overallProgress)}% complete</span>
+        <span>{progress.wordsRead.toLocaleString()} words read</span>
+      </div>
     </div>
   </div>
 );
 
 /**
- * ReaderView: Displays the actual chapter content within a paginated view.
+ * Enhanced Reader View with smooth pagination and animations
  */
 const ReaderView = ({
   content,
-  fontSize,
-  theme,
+  settings,
   onNextChapter,
   onPrevChapter,
+  onPageChange,
+  onTotalPagesChange,
   isFirstChapter,
-  isLastChapter
+  isLastChapter,
+  currentPage,
+  totalPages,
+  chapterProgress
 }: {
   content: string;
-  fontSize: number;
-  theme: 'light' | 'dark';
+  settings: ReadingSettings;
   onNextChapter: () => void;
   onPrevChapter: () => void;
+  onPageChange: (page: number) => void;
+  onTotalPagesChange: (totalPages: number) => void;
   isFirstChapter: boolean;
   isLastChapter: boolean;
+  currentPage: number;
+  totalPages: number;
+  chapterProgress: number;
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // Calculate pages when content or fontSize changes
-  useEffect(() => {
-    if (!containerRef.current || !contentRef.current) return;
-
-    const calculatePages = () => {
-      const container = containerRef.current!;
-      const content = contentRef.current!;
-      
-      // Get the available height for content
-      const pageHeight = container.clientHeight;
-      const totalHeight = content.scrollHeight;
-      const pages = Math.max(1, Math.ceil(totalHeight / pageHeight));
-      
-      setTotalPages(pages);
-      setCurrentPage(1);
-    };
-
-    // Clean and set the content
-    const cleanContent = DOMPurify.sanitize(content, {
-      ADD_TAGS: ['image', 'svg'],
-      ADD_ATTR: ['srcset', 'alt']
-    });
-    
-    if (contentRef.current) {
-      contentRef.current.innerHTML = cleanContent;
-      // Wait for content to be rendered before calculating pages
-      requestAnimationFrame(calculatePages);
-    }
-
-    const handleResize = debounce(calculatePages, 100);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [content, fontSize]);
-
-  // Handle page navigation
-  const goToPage = (page: number) => {
-    if (!containerRef.current || !contentRef.current) return;
+  const goToPage = useCallback((page: number, smooth = true) => {
+    if (!containerRef.current || isTransitioning) return;
 
     if (page < 1) {
       if (!isFirstChapter) {
+        setIsTransitioning(true);
         onPrevChapter();
+        setTimeout(() => setIsTransitioning(false), 300);
       }
       return;
     }
     if (page > totalPages) {
       if (!isLastChapter) {
+        setIsTransitioning(true);
         onNextChapter();
+        setTimeout(() => setIsTransitioning(false), 300);
       }
       return;
     }
 
-    setCurrentPage(page);
-    
-    // Scroll content to the correct page
     const pageHeight = containerRef.current.clientHeight;
-    containerRef.current.scrollTo({
-      top: (page - 1) * pageHeight,
-      behavior: 'smooth'
-    });
-  };
+    const scrollTop = (page - 1) * pageHeight;
+    
+    if (smooth) {
+      containerRef.current.scrollTo({
+        top: scrollTop,
+        behavior: 'smooth'
+      });
+    } else {
+      containerRef.current.scrollTop = scrollTop;
+    }
+    
+    onPageChange(page);
+  }, [isTransitioning, isFirstChapter, isLastChapter, totalPages, onPrevChapter, onNextChapter, onPageChange]);
 
-  // Handle keyboard navigation in ReaderView
+  // Enhanced keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Skip if Ctrl key is pressed (reserved for chapter navigation)
-      if (e.ctrlKey) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      // Handle page navigation
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
-        e.preventDefault();
-        goToPage(currentPage - 1);
-      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
-        e.preventDefault();
-        goToPage(currentPage + 1);
+      switch (e.key) {
+        case 'ArrowLeft':
+        case 'ArrowUp':
+        case 'PageUp':
+          e.preventDefault();
+          goToPage(currentPage - 1);
+          break;
+        case 'ArrowRight':
+        case 'ArrowDown':
+        case 'PageDown':
+        case ' ':
+          e.preventDefault();
+          goToPage(currentPage + 1);
+          break;
+        case 'Home':
+          e.preventDefault();
+          goToPage(1);
+          break;
+        case 'End':
+          e.preventDefault();
+          goToPage(totalPages);
+          break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPage, totalPages]);
+  }, [currentPage, totalPages, goToPage]);
+
+  // Set content and handle page calculations
+  useEffect(() => {
+    if (!contentRef.current || !containerRef.current) return;
+
+    const cleanContent = DOMPurify.sanitize(content, {
+      ADD_TAGS: ['image', 'svg'],
+      ADD_ATTR: ['srcset', 'alt']
+    });
+    
+    contentRef.current.innerHTML = cleanContent;
+
+    // Calculate pages based on content height
+    const calculatePages = () => {
+      if (!contentRef.current || !containerRef.current) return;
+      
+      const containerHeight = containerRef.current.clientHeight;
+      const contentHeight = contentRef.current.scrollHeight;
+      
+      if (contentHeight > 0 && containerHeight > 0) {
+        const pages = Math.max(1, Math.ceil(contentHeight / containerHeight));
+        // Update total pages for this chapter
+        if (pages !== totalPages) {
+          onTotalPagesChange(pages);
+          onPageChange(1); // Reset to first page when content changes
+        }
+      }
+    };
+
+    // Wait for images to load before calculating pages
+    const images = contentRef.current.querySelectorAll('img');
+    let loadedImages = 0;
+    
+    if (images.length === 0) {
+      calculatePages();
+    } else {
+      images.forEach((img) => {
+        if (img.complete) {
+          loadedImages++;
+          if (loadedImages === images.length) {
+            calculatePages();
+          }
+        } else {
+          img.onload = () => {
+            loadedImages++;
+            if (loadedImages === images.length) {
+              calculatePages();
+            }
+          };
+          img.onerror = () => {
+            loadedImages++;
+            if (loadedImages === images.length) {
+              calculatePages();
+            }
+          };
+        }
+      });
+    }
+  }, [content, totalPages, onPageChange, onTotalPagesChange]);
+
+  const themeClasses = {
+    light: 'bg-white text-gray-900',
+    dark: 'bg-gray-900 text-gray-100',
+    sepia: 'bg-amber-50 text-amber-900'
+  };
+
+  const modeClasses = {
+    normal: '',
+    focus: 'max-w-4xl mx-auto',
+    immersive: 'max-w-3xl mx-auto'
+  };
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-12rem)]">
+    <div className="flex flex-col h-full">
       <div
         ref={containerRef}
         className={classNames(
-          'flex-1 bg-white dark:bg-gray-900 rounded-xl overflow-hidden snap-y snap-mandatory',
-          { 'text-gray-900 dark:text-gray-100': theme === 'dark' }
+          'flex-1 overflow-hidden relative transition-all duration-300',
+          themeClasses[settings.theme],
+          modeClasses[settings.readingMode],
+          {
+            'opacity-70': isTransitioning
+          }
         )}
+        style={{
+          fontSize: `${settings.fontSize}px`,
+          fontFamily: settings.fontFamily,
+          lineHeight: settings.lineHeight,
+          letterSpacing: `${settings.letterSpacing}px`
+        }}
       >
         <div
           ref={contentRef}
-          className="prose dark:prose-invert max-w-none p-8"
+          className="prose max-w-none transition-all duration-300"
           style={{
-            fontSize: `${fontSize}px`,
-            lineHeight: '1.8'
+            padding: `${settings.marginSize}px`,
+            maxWidth: `${settings.columnWidth}ch`,
+            margin: settings.pageLayout === 'single' ? '0 auto' : undefined,
+            columns: settings.pageLayout === 'double' ? 2 : undefined,
+            columnGap: settings.pageLayout === 'double' ? `${settings.marginSize * 2}px` : undefined
           }}
         />
+        
+        {/* Page turn animations */}
+        {isTransitioning && (
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform skew-x-12 animate-pulse" />
+        )}
       </div>
       
-      {/* Page Navigation */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
-        <button
-          onClick={() => goToPage(currentPage - 1)}
-          disabled={currentPage === 1 && isFirstChapter}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
-          aria-label="Previous page"
-        >
-          <IoChevronBack className="w-5 h-5" />
-          <span className="text-sm">Previous</span>
-        </button>
-        
-        <span className="text-sm text-gray-600 dark:text-gray-400">
-          Page {currentPage} of {totalPages}
-        </span>
-        
-        <button
-          onClick={() => goToPage(currentPage + 1)}
-          disabled={currentPage === totalPages && isLastChapter}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
-          aria-label="Next page"
-        >
-          <span className="text-sm">Next</span>
-          <IoChevronForward className="w-5 h-5" />
-        </button>
-      </div>
+      {/* Navigation Controls */}
+      {settings.readingMode !== 'immersive' && (
+        <div className="flex items-center justify-between px-6 py-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-t border-gray-200/50 dark:border-gray-700/50">
+          <button
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage === 1 && isFirstChapter}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-all duration-200 group"
+            aria-label="Previous page"
+          >
+            <IoChevronBack className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+            <span className="text-sm font-medium">Previous</span>
+          </button>
+          
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              Page {currentPage} of {totalPages}
+            </span>
+            <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-1">
+              <div
+                className="bg-blue-600 h-1 rounded-full transition-all duration-300"
+                style={{ width: `${chapterProgress}%` }}
+              />
+            </div>
+          </div>
+          
+          <button
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage === totalPages && isLastChapter}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-all duration-200 group"
+            aria-label="Next page"
+          >
+            <span className="text-sm font-medium">Next</span>
+            <IoChevronForward className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };
 
 export default function EPUBReader({ file, onHighlight }: EPUBReaderProps) {
-  // -------------------------------------------------
-  // State variables
-  // -------------------------------------------------
+  // Core state
   const [chapters, setChapters] = useState<EPUBChapter[]>([]);
   const [resources, setResources] = useState<Map<string, EPUBResource>>(new Map());
-  const [currentChapter, setCurrentChapter] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // UI state
   const [showTOC, setShowTOC] = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Bookmarks stored in localStorage for persistence
-  const [bookmarks, setBookmarks] = useState<number[]>(() => {
-    const stored = localStorage.getItem('epub-bookmarks');
-    return stored ? JSON.parse(stored) : [];
+  // Reading state
+  const [progress, setProgress] = useState<ReadingProgress>({
+    currentChapter: 0,
+    currentPage: 1,
+    totalPages: 1,
+    overallProgress: 0,
+    timeSpent: 0,
+    wordsRead: 0,
+    sessionsToday: 1,
+    streak: 1
   });
 
-  // Theme preference stored in localStorage (light/dark)
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const stored = localStorage.getItem('epub-theme');
-    if (stored === 'light' || stored === 'dark') return stored;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // Settings with local storage persistence
+  const [settings, setSettings] = useState<ReadingSettings>(() => {
+    if (typeof window === 'undefined') {
+      return {
+        fontSize: 16,
+        fontFamily: 'serif',
+        lineHeight: 1.6,
+        letterSpacing: 0,
+        columnWidth: 65,
+        marginSize: 40,
+        pageLayout: 'single',
+        readingMode: 'normal',
+        theme: 'light',
+        backgroundMusic: false,
+        autoPageTurn: false,
+        readingGoal: 30
+      };
+    }
+    
+    const stored = localStorage.getItem('epub-settings');
+    if (stored) {
+      return { ...JSON.parse(stored) };
+    }
+    
+    return {
+      fontSize: 16,
+      fontFamily: 'serif',
+      lineHeight: 1.6,
+      letterSpacing: 0,
+      columnWidth: 65,
+      marginSize: 40,
+      pageLayout: 'single',
+      readingMode: 'normal',
+      theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+      backgroundMusic: false,
+      autoPageTurn: false,
+      readingGoal: 30
+    };
   });
 
-  // Font size stored in localStorage
-  const [fontSize, setFontSize] = useState<number>(() => {
-    const stored = localStorage.getItem('epub-fontSize');
-    return stored ? parseInt(stored, 10) : 16;
+  // Bookmarks with enhanced features
+  const [bookmarks, setBookmarks] = useState<BookmarkWithNote[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('epub-bookmarks');
+      return stored ? JSON.parse(stored) : [];
+    } catch (err) {
+      console.warn('Failed to load bookmarks from localStorage:', err);
+      return [];
+    }
   });
 
-  // Search-related states
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<{ chapterIndex: number; snippet: string }[]>([]);
-  const [currentSearchIndex, setCurrentSearchIndex] = useState<number>(0);
-  const [showSearch, setShowSearch] = useState<boolean>(false);
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ chapterIndex: number; snippet: string; position: number }[]>([]);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // References
-  const contentRef = useRef<HTMLDivElement>(null);
+  // Update settings handler
+  const updateSettings = useCallback((newSettings: Partial<ReadingSettings>) => {
+    setSettings(prev => {
+      const updated = { ...prev, ...newSettings };
+      try {
+        localStorage.setItem('epub-settings', JSON.stringify(updated));
+      } catch (err) {
+        console.warn('Failed to save settings to localStorage:', err);
+      }
+      return updated;
+    });
+  }, []);
 
-  // -------------------------------------------------
-  // Effects and event handlers
-  // -------------------------------------------------
-
-  /**
-   * Effect: Apply the theme (light/dark) to the document root.
-   */
+  // Apply theme to document
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('epub-theme', theme);
-  }, [theme]);
+    document.documentElement.classList.toggle('dark', settings.theme === 'dark');
+    if (settings.theme === 'sepia') {
+      document.documentElement.style.setProperty('--background', '252 248 227');
+      document.documentElement.style.setProperty('--foreground', '120 53 15');
+    } else {
+      document.documentElement.style.removeProperty('--background');
+      document.documentElement.style.removeProperty('--foreground');
+    }
+  }, [settings.theme]);
 
-  /**
-   * Effect: Save bookmarks whenever they change.
-   */
+  // Save bookmarks to localStorage
   useEffect(() => {
-    localStorage.setItem('epub-bookmarks', JSON.stringify(bookmarks));
+    try {
+      localStorage.setItem('epub-bookmarks', JSON.stringify(bookmarks));
+    } catch (err) {
+      console.warn('Failed to save bookmarks to localStorage:', err);
+    }
   }, [bookmarks]);
 
-  /**
-   * Effect: Save font size whenever it changes.
-   */
-  useEffect(() => {
-    localStorage.setItem('epub-fontSize', fontSize.toString());
-  }, [fontSize]);
-
-  /**
-   * Effect: Load and parse the EPUB file whenever it changes.
-   */
+  // EPUB loading logic (enhanced from original)
   useEffect(() => {
     const loadEpub = async () => {
       try {
@@ -577,7 +1222,6 @@ export default function EPUBReader({ file, onHighlight }: EPUBReaderProps) {
         setError(null);
         setResources(new Map());
 
-        // Initialize JSZip with the selected file
         const zip = new JSZip();
         const content = await zip.loadAsync(file);
 
@@ -612,7 +1256,7 @@ export default function EPUBReader({ file, onHighlight }: EPUBReaderProps) {
           if (id && href && mediaType) {
             items.set(id, { id, href, mediaType });
 
-            // Load binary resources (images, fonts, etc.) as base64
+            // Load binary resources
             if (
               mediaType.startsWith('image/') ||
               mediaType.startsWith('application/') ||
@@ -636,12 +1280,12 @@ export default function EPUBReader({ file, onHighlight }: EPUBReaderProps) {
 
         setResources(resourcesMap);
 
-        // Process spine (the reading order of chapters)
+        // Process spine
         const spineItems = Array.from(spine.getElementsByTagName('itemref'))
           .map((itemref) => itemref.getAttribute('idref'))
           .filter((idref): idref is string => idref !== null);
 
-        // Load chapters in order
+        // Load chapters with enhanced metadata
         const loadedChapters: EPUBChapter[] = [];
         for (const [index, idref] of spineItems.entries()) {
           const item = items.get(idref);
@@ -652,7 +1296,6 @@ export default function EPUBReader({ file, onHighlight }: EPUBReaderProps) {
           const chapterContent = await content.file(chapterPath)?.async('text');
           if (!chapterContent) continue;
 
-          // Process the XHTML content of this chapter
           const chapterData = await processChapterContent(chapterContent, resourcesMap, item.href, index + 1);
           loadedChapters.push({
             id: item.id,
@@ -662,6 +1305,10 @@ export default function EPUBReader({ file, onHighlight }: EPUBReaderProps) {
         }
 
         setChapters(loadedChapters);
+        setProgress(prev => ({
+          ...prev,
+          totalPages: 1 // Will be updated per chapter
+        }));
         setIsLoading(false);
       } catch (err) {
         console.error('Error loading EPUB:', err);
@@ -673,13 +1320,7 @@ export default function EPUBReader({ file, onHighlight }: EPUBReaderProps) {
     loadEpub();
   }, [file]);
 
-  /**
-   * Function to process a single chapter's XHTML content:
-   * - Parse the body
-   * - Extract a title/subtitle if any
-   * - Convert local image paths to base64 data URLs
-   * - Sanitize the final HTML
-   */
+  // Enhanced chapter content processing
   const processChapterContent = async (
     chapterContent: string,
     resources: Map<string, EPUBResource>,
@@ -690,52 +1331,74 @@ export default function EPUBReader({ file, onHighlight }: EPUBReaderProps) {
     let contentElement: Element | null = null;
     let title = `Chapter ${chapterNumber}`;
     let subtitle = '';
-    let level = 1; // Adjust if you want to track deeper structure
+    let level = 1;
 
     try {
-      // Attempt to parse as an XHTML/XML document
       const chapterDoc = parser.parseFromString(chapterContent, 'application/xhtml+xml');
+      
+      // Check for parsing errors
+      const parseErrors = chapterDoc.getElementsByTagName('parsererror');
+      if (parseErrors.length > 0) {
+        throw new Error('XML parsing failed');
+      }
+      
       contentElement = chapterDoc.getElementsByTagName('body')[0];
 
-      // Extract possible title from <title>, <h1>, <h2>...
       const mainTitle = chapterDoc.getElementsByTagName('title')[0]?.textContent || '';
       const h1 = chapterDoc.getElementsByTagName('h1')[0]?.textContent || '';
       const h2 = chapterDoc.getElementsByTagName('h2')[0]?.textContent || '';
 
-      // Use the discovered titles
       title = mainTitle || h1 || title;
       if (h1 && h2) {
         title = h1;
         subtitle = h2;
-      } else if (title.match(/^\s*[\w\s]+\s+\d+:\d+(?:-\d+)?\s*$/)) {
-        // Example logic for certain title patterns (like bible verses)
-        subtitle = title;
-        title = h2 || `Chapter ${chapterNumber}`;
-      }
-
-      // Check if parser error
-      if (chapterDoc.getElementsByTagName('parsererror').length > 0) {
-        throw new Error('Failed to parse chapter content');
       }
     } catch (err) {
-      console.warn('Primary parsing failed, trying fragment:', err);
-    }
-
-    // Fallback: try parsing as a fragment if <body> not found
-    if (!contentElement) {
+      console.warn('Primary XHTML parsing failed, trying HTML parsing:', err);
+      
+      // Fallback to HTML parsing
       try {
-        const fragmentDoc = parser.parseFromString(
-          `<div xmlns="http://www.w3.org/1999/xhtml">${chapterContent}</div>`,
-          'application/xhtml+xml'
-        );
-        contentElement = fragmentDoc.documentElement;
-      } catch (err) {
-        console.error('Fragment parsing failed:', err);
-        return { title, subtitle, level, content: chapterContent };
+        const htmlDoc = parser.parseFromString(chapterContent, 'text/html');
+        contentElement = htmlDoc.body;
+        
+        if (contentElement) {
+          const h1 = htmlDoc.getElementsByTagName('h1')[0]?.textContent || '';
+          const h2 = htmlDoc.getElementsByTagName('h2')[0]?.textContent || '';
+          title = h1 || title;
+          if (h1 && h2) {
+            title = h1;
+            subtitle = h2;
+          }
+        }
+      } catch (htmlErr) {
+        console.warn('HTML parsing also failed, trying fragment:', htmlErr);
       }
     }
 
-    // Serialize and process content
+    if (!contentElement) {
+      try {
+        // Last resort: wrap in a simple div and try parsing
+        const fragmentDoc = parser.parseFromString(
+          `<div>${chapterContent}</div>`,
+          'text/html'
+        );
+        contentElement = fragmentDoc.body?.firstElementChild;
+      } catch (err) {
+        console.error('All parsing methods failed:', err);
+        // Return basic processed content without DOM parsing
+        const textContent = chapterContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        const wordCount = textContent.split(' ').filter(word => word.length > 0).length;
+        return { 
+          title, 
+          subtitle, 
+          level, 
+          content: DOMPurify.sanitize(chapterContent),
+          wordCount,
+          estimatedReadTime: Math.ceil(wordCount / 250)
+        };
+      }
+    }
+
     let processedContent = chapterContent;
     if (contentElement instanceof Element) {
       try {
@@ -745,276 +1408,409 @@ export default function EPUBReader({ file, onHighlight }: EPUBReaderProps) {
           .replace(/^<div[^>]*>/, '')
           .replace(/<\/div>$/, '')
           .replace(/<body[^>]*>/, '')
-          .replace(/<\/body>/, '')
-          .replace(/<hr/g, '<hr class="my-8 border-t border-gray-300 dark:border-gray-600"');
+          .replace(/<\/body>/, '');
       } catch (err) {
         console.error('Content serialization failed:', err);
       }
     }
 
-    // Normalize path for images. Attempt to resolve relative paths with the chapter's directory.
+    // Enhanced image processing with better path resolution
     const baseDir = chapterHref.split('/').slice(0, -1).join('/') + '/';
+    processedContent = processedContent.replace(/src="([^"]+)"/g, (match, originalSrc) => {
+      if (originalSrc.startsWith('data:') || originalSrc.startsWith('http')) {
+        return match;
+      }
 
+      let normalizedSrc = originalSrc.replace(/^\.\//, '');
+      while (normalizedSrc.includes('../')) {
+        const parts = baseDir.split('/');
+        parts.pop();
+        normalizedSrc = normalizedSrc.replace('../', '');
+        const newBase = parts.join('/');
+        normalizedSrc = newBase ? `${newBase}/${normalizedSrc}` : normalizedSrc;
+      }
+
+      if (!normalizedSrc.startsWith(baseDir) && baseDir !== '/') {
+        normalizedSrc = baseDir + normalizedSrc;
+      }
+
+      const segments = normalizedSrc.split('/');
+      const lastSegments = segments.slice(-2).join('/');
+
+      let resource = resources.get(normalizedSrc) || resources.get(lastSegments);
+      if (resource) {
+        return `src="${resource.data}"`;
+      } else {
+        console.warn('Image resource not found for:', originalSrc, normalizedSrc);
+        return match;
+      }
+    });
+
+    // Clean up EPUB-specific attributes
     processedContent = processedContent
-      // Replace all src="..." occurrences
-      .replace(/src="([^"]+)"/g, (match, originalSrc) => {
-        // If it's already a data URL or an absolute http(s) link, leave it be
-        if (originalSrc.startsWith('data:') || originalSrc.startsWith('http')) {
-          return match;
-        }
-
-        // Attempt to normalize the path to match the resources map keys
-        // E.g., if the originalSrc is "images/pic.jpg" and baseDir is "OEBPS/"
-        // then the normalized path might be "OEBPS/images/pic.jpg" 
-        let normalizedSrc = originalSrc;
-
-        // Remove any leading "./"
-        normalizedSrc = normalizedSrc.replace(/^\.\//, '');
-        // Resolve ../ if it appears (simple approach, can be made more robust if needed)
-        while (normalizedSrc.includes('../')) {
-          const parts = baseDir.split('/');
-          parts.pop(); // remove the last segment
-          normalizedSrc = normalizedSrc.replace('../', '');
-          // Rebuild the base directory after removing one level
-          const newBase = parts.join('/');
-          normalizedSrc = newBase ? `${newBase}/${normalizedSrc}` : normalizedSrc;
-        }
-
-        // If no ../ pattern, just join
-        if (!normalizedSrc.startsWith(baseDir) && baseDir !== '/') {
-          normalizedSrc = baseDir + normalizedSrc;
-        }
-
-        // Finally, get the resource if it exists
-        // The key in `resources` is typically the relative path from the OPF base
-        // So we strip the part before the actual filename to see if it matches
-        const segments = normalizedSrc.split('/');
-        const lastSegments = segments.slice(-2).join('/'); // e.g. "images/pic.jpg"
-
-        // We'll try direct full normalized path or last-segments path
-        let resource = resources.get(normalizedSrc);
-        if (!resource) {
-          resource = resources.get(lastSegments);
-        }
-
-        if (resource) {
-          return `src="${resource.data}"`;
-        } else {
-          console.warn('Image resource not found for:', originalSrc, normalizedSrc);
-          return match; // fallback, keep original src
-        }
-      })
-      // Remove unwanted epub/xml attributes
       .replace(/xmlns="[^"]*"/g, '')
       .replace(/xmlns:epub="[^"]*"/g, '')
       .replace(/epub:type="[^"]*"/g, '')
       .replace(/xml:lang="[^"]*"/g, '');
 
-    // Sanitize the processed content to prevent XSS attacks
+    // Calculate word count and reading time
+    const textContent = processedContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const wordCount = textContent.split(' ').filter(word => word.length > 0).length;
+    const estimatedReadTime = Math.ceil(wordCount / 250); // 250 words per minute average
+
     processedContent = DOMPurify.sanitize(processedContent);
 
-    return { title, subtitle, level, content: processedContent };
+    return { 
+      title, 
+      subtitle, 
+      level, 
+      content: processedContent,
+      wordCount,
+      estimatedReadTime
+    };
   };
 
-  /**
-   * Effect: When the current chapter changes or resources are set,
-   * ensure <img> tags get updated to base64 if we didn't catch them in the string replacement.
-   */
-  useEffect(() => {
-    if (!contentRef.current || !resources.size) return;
-
-    const images = contentRef.current.getElementsByTagName('img');
-    Array.from(images).forEach((img) => {
-      const src = img.getAttribute('src');
-      if (src && resources.has(src)) {
-        img.src = resources.get(src)!.data;
-        img.loading = 'lazy'; // Enable native lazy loading
-      }
-    });
-  }, [currentChapter, resources]);
-
-  /**
-   * Keyboard navigation: Left/Right arrows for pages, Ctrl+Left/Right for chapters
-   */
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      // Only handle chapter navigation with Ctrl key
-      if (e.ctrlKey) {
-        if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          handlePrevChapter();
-        } else if (e.key === 'ArrowRight') {
-          e.preventDefault();
-          handleNextChapter();
-        }
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showTOC, showBookmarks, showSearch, currentChapter]);
-
-  // -------------------------------------------------
-  // Chapter navigation
-  // -------------------------------------------------
-  const handlePrevChapter = () => {
-    if (currentChapter > 0) {
-      setCurrentChapter((prev) => prev - 1);
-      contentRef.current?.scrollTo(0, 0);
-    }
-  };
-
-  const handleNextChapter = () => {
-    if (currentChapter < chapters.length - 1) {
-      setCurrentChapter((prev) => prev + 1);
-      contentRef.current?.scrollTo(0, 0);
-    }
-  };
-
-  const handleChapterSelect = (index: number) => {
-    setCurrentChapter(index);
-    setShowTOC(false);
-    contentRef.current?.scrollTo(0, 0);
-  };
-
-  // -------------------------------------------------
-  // Bookmarks handling
-  // -------------------------------------------------
-  const toggleBookmark = () => {
-    setBookmarks((prev) => {
-      if (prev.includes(currentChapter)) {
-        return prev.filter((chap) => chap !== currentChapter);
-      } else {
-        return [...prev, currentChapter];
-      }
-    });
-  };
-
-  const handleBookmarkSelect = (index: number) => {
-    setCurrentChapter(index);
-    setShowBookmarks(false);
-    contentRef.current?.scrollTo(0, 0);
-  };
-
-  // -------------------------------------------------
-  // Theme toggle
-  // -------------------------------------------------
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
-  };
-
-  // -------------------------------------------------
-  // Font size
-  // -------------------------------------------------
-  const increaseFontSize = () => setFontSize((prev) => Math.min(prev + 2, 24));
-  const decreaseFontSize = () => setFontSize((prev) => Math.max(prev - 2, 12));
-
-  // -------------------------------------------------
-  // Search functionality
-  // -------------------------------------------------
-  // Debounced search to avoid heavy processing on every keystroke
+  // Enhanced search with better performance
   const handleSearch = useMemo(
-    () =>
-      debounce((query: string) => {
-        if (!query) {
-          setSearchResults([]);
-          return;
-        }
+    () => debounce(async (query: string) => {
+      if (!query.trim()) {
+        setSearchResults([]);
+        setIsSearching(false);
+        return;
+      }
 
-        const results: { chapterIndex: number; snippet: string }[] = [];
+      setIsSearching(true);
+      
+      // Use setTimeout to avoid blocking UI
+      setTimeout(() => {
+        const results: { chapterIndex: number; snippet: string; position: number }[] = [];
+        const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
 
         chapters.forEach((chapter, index) => {
-          const regex = new RegExp(query, 'gi');
-          let match;
-          let foundCount = 0;
-          while ((match = regex.exec(chapter.content)) !== null) {
-            // Create a small snippet around the match
-            const snippetStart = Math.max(match.index - 30, 0);
-            const snippetEnd = Math.min(match.index + query.length + 30, chapter.content.length);
-            let snippet = chapter.content.substring(snippetStart, snippetEnd);
+          try {
+            let match;
+            let foundCount = 0;
+            const content = chapter.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            
+            if (!content) return; // Skip empty content
+            
+            // Reset regex lastIndex to avoid issues with global regex
+            regex.lastIndex = 0;
+            
+            while ((match = regex.exec(content)) !== null && foundCount < 5) {
+              const snippetStart = Math.max(match.index - 50, 0);
+              const snippetEnd = Math.min(match.index + query.length + 50, content.length);
+              let snippet = content.substring(snippetStart, snippetEnd);
+              
+              // Escape the snippet content before adding highlight markup
+              snippet = snippet.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              snippet = snippet.replace(new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), (m) => `<mark class="bg-yellow-200 dark:bg-yellow-800">${m}</mark>`);
+              
+              if (snippetStart > 0) snippet = '...' + snippet;
+              if (snippetEnd < content.length) snippet = snippet + '...';
 
-            // Replace the matched term with <mark>
-            snippet = snippet.replace(regex, (m) => `<mark>${m}</mark>`);
-
-            results.push({ chapterIndex: index, snippet });
-            foundCount++;
-            // Limit to first 3 matches per chapter for brevity
-            if (foundCount >= 3) break;
+              const position = Math.round((match.index / content.length) * 100);
+              
+              results.push({ chapterIndex: index, snippet, position });
+              foundCount++;
+              
+              // Prevent infinite loops with zero-width matches
+              if (match.index === regex.lastIndex) {
+                regex.lastIndex++;
+              }
+            }
+          } catch (searchErr) {
+            console.warn(`Search failed for chapter ${index}:`, searchErr);
           }
         });
 
         setSearchResults(results);
         setCurrentSearchIndex(0);
-      }, 500),
+        setIsSearching(false);
+      }, 100);
+    }, 300),
     [chapters]
   );
 
-  // Update search query
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
     setSearchQuery(query);
     handleSearch(query);
   };
 
-  // Navigate between search results (just highlight them in the modal UI)
-  const navigateSearchResult = (direction: 'next' | 'prev') => {
+  // Navigation handlers
+  const handlePrevChapter = useCallback(() => {
+    if (progress.currentChapter > 0) {
+      setProgress(prev => ({
+        ...prev,
+        currentChapter: prev.currentChapter - 1,
+        currentPage: 1
+      }));
+    }
+  }, [progress.currentChapter]);
+
+  const handleNextChapter = useCallback(() => {
+    if (progress.currentChapter < chapters.length - 1) {
+      setProgress(prev => ({
+        ...prev,
+        currentChapter: prev.currentChapter + 1,
+        currentPage: 1
+      }));
+    }
+  }, [progress.currentChapter, chapters.length]);
+
+  const handleChapterSelect = useCallback((index: number) => {
+    setProgress(prev => ({
+      ...prev,
+      currentChapter: index,
+      currentPage: 1
+    }));
+    setShowTOC(false);
+    setShowBookmarks(false);
+  }, []);
+
+  const handlePageChange = useCallback((page: number) => {
+    setProgress(prev => ({
+      ...prev,
+      currentPage: page
+    }));
+  }, []);
+
+  const handleTotalPagesChange = useCallback((totalPages: number) => {
+    setProgress(prev => ({
+      ...prev,
+      totalPages: totalPages
+    }));
+  }, []);
+
+  // Bookmark handlers
+  const toggleBookmark = useCallback(() => {
+    const bookmarkId = `${progress.currentChapter}-${progress.currentPage}-${Date.now()}`;
+    const currentPosition = progress.totalPages > 0 
+      ? Math.round((progress.currentPage / progress.totalPages) * 100) 
+      : 0;
+    
+    const existingBookmark = bookmarks.find(b => 
+      b.chapterIndex === progress.currentChapter && 
+      Math.abs(b.position - currentPosition) < 5
+    );
+
+    if (existingBookmark) {
+      setBookmarks(prev => prev.filter(b => b.id !== existingBookmark.id));
+    } else {
+      const newBookmark: BookmarkWithNote = {
+        id: bookmarkId,
+        chapterIndex: progress.currentChapter,
+        position: currentPosition,
+        note: '',
+        category: '',
+        createdAt: Date.now()
+      };
+      setBookmarks(prev => [...prev, newBookmark]);
+    }
+  }, [progress, bookmarks]);
+
+  const updateBookmarkNote = useCallback((bookmarkId: string, note: string) => {
+    setBookmarks(prev => prev.map(b => b.id === bookmarkId ? { ...b, note } : b));
+  }, []);
+
+  const updateBookmarkCategory = useCallback((bookmarkId: string, category: string) => {
+    setBookmarks(prev => prev.map(b => b.id === bookmarkId ? { ...b, category } : b));
+  }, []);
+
+  const deleteBookmark = useCallback((bookmarkId: string) => {
+    setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
+  }, []);
+
+  const handleBookmarkSelect = useCallback((chapterIndex: number, position: number) => {
+    setProgress(prev => ({
+      ...prev,
+      currentChapter: chapterIndex,
+      currentPage: prev.totalPages > 0 
+        ? Math.max(1, Math.round((position / 100) * prev.totalPages))
+        : 1
+    }));
+    setShowBookmarks(false);
+  }, []);
+
+  // Search navigation
+  const navigateSearchResult = useCallback((direction: 'next' | 'prev') => {
     if (searchResults.length === 0) return;
-    setCurrentSearchIndex((prev) => {
+    setCurrentSearchIndex(prev => {
       if (direction === 'next') {
         return prev < searchResults.length - 1 ? prev + 1 : 0;
       } else {
         return prev > 0 ? prev - 1 : searchResults.length - 1;
       }
     });
-  };
+  }, [searchResults.length]);
 
-  // -------------------------------------------------
-  // Progress calculation
-  // -------------------------------------------------
-  const progress =
-    chapters.length > 0
-      ? Math.round((currentChapter / (chapters.length - 1)) * 100)
+  const handleSearchSelect = useCallback((chapterIndex: number, position: number) => {
+    setProgress(prev => ({
+      ...prev,
+      currentChapter: chapterIndex,
+      currentPage: prev.totalPages > 0 
+        ? Math.max(1, Math.round((position / 100) * prev.totalPages))
+        : 1
+    }));
+    setShowSearch(false);
+  }, []);
+
+  // Fullscreen handling
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.warn('Fullscreen operation failed:', err);
+      // Fallback: just toggle the state for styling purposes
+      setIsFullscreen(prev => !prev);
+    }
+  }, []);
+
+  // Reading mode cycling
+  const toggleReadingMode = useCallback(() => {
+    const modes: ReadingSettings['readingMode'][] = ['normal', 'focus', 'immersive'];
+    const currentIndex = modes.indexOf(settings.readingMode);
+    const nextMode = modes[(currentIndex + 1) % modes.length];
+    updateSettings({ readingMode: nextMode });
+  }, [settings.readingMode, updateSettings]);
+
+  // Calculate overall progress
+  useEffect(() => {
+    if (chapters.length === 0) return;
+    
+    // Calculate progress based on chapters completed + current chapter progress
+    const chaptersCompleted = progress.currentChapter;
+    const currentChapterProgress = progress.totalPages > 0 ? (progress.currentPage - 1) / progress.totalPages : 0;
+    const overallProgress = ((chaptersCompleted + currentChapterProgress) / chapters.length) * 100;
+    
+    // Calculate words read
+    const wordsReadFromCompletedChapters = chapters.slice(0, progress.currentChapter)
+      .reduce((total, chapter) => total + chapter.wordCount, 0);
+    
+    const wordsReadFromCurrentChapter = (chapters[progress.currentChapter]?.wordCount || 0) * currentChapterProgress;
+    
+    const totalWordsRead = wordsReadFromCompletedChapters + wordsReadFromCurrentChapter;
+
+    setProgress(prev => ({
+      ...prev,
+      overallProgress: Math.min(100, Math.max(0, overallProgress)),
+      wordsRead: Math.round(totalWordsRead)
+    }));
+  }, [progress.currentChapter, progress.currentPage, progress.totalPages, chapters]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // Modal close on Escape
+      if (e.key === 'Escape') {
+        setShowTOC(false);
+        setShowBookmarks(false);
+        setShowSearch(false);
+        setShowSettings(false);
+        setShowStats(false);
+        return;
+      }
+
+      // Global shortcuts with Ctrl/Cmd
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+          case 't':
+            e.preventDefault();
+            setShowTOC(true);
+            break;
+          case 'b':
+            e.preventDefault();
+            toggleBookmark();
+            break;
+          case 'f':
+            e.preventDefault();
+            setShowSearch(true);
+            break;
+          case ',':
+            e.preventDefault();
+            setShowSettings(true);
+            break;
+          case 'Enter':
+            e.preventDefault();
+            toggleFullscreen();
+            break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [toggleBookmark, toggleFullscreen]);
+
+  const currentBookmark = bookmarks.find(b => {
+    const currentPosition = progress.totalPages > 0 
+      ? Math.round((progress.currentPage / progress.totalPages) * 100) 
       : 0;
+    return b.chapterIndex === progress.currentChapter && 
+           Math.abs(b.position - currentPosition) < 5;
+  });
 
-  // -------------------------------------------------
-  // Render
-  // -------------------------------------------------
+  const chapterProgress = progress.totalPages > 0 ? (progress.currentPage / progress.totalPages) * 100 : 0;
+
   return (
-    <div className={`flex flex-col h-full transition-colors duration-300 ${theme === 'dark' ? 'dark' : ''}`}>
-      {/* Reader controls */}
-      <ControlsBar
-        onToggleTOC={() => setShowTOC(true)}
-        onToggleBookmarks={() => setShowBookmarks(true)}
-        onToggleSearch={() => setShowSearch(true)}
-        onToggleTheme={toggleTheme}
-        theme={theme}
-        onIncreaseFont={increaseFontSize}
-        onDecreaseFont={decreaseFontSize}
-        isLoading={isLoading}
-        currentChapter={currentChapter}
-        chapters={chapters}
-      />
-
-      {/* Table of Contents Modal */}
-      {showTOC && (
-        <TOCModal
+    <div className={classNames(
+      'flex flex-col h-full transition-all duration-300',
+      {
+        'fixed inset-0 z-50': isFullscreen,
+        [settings.theme]: true
+      }
+    )}>
+      {/* Controls */}
+      {settings.readingMode !== 'immersive' && (
+        <ControlsBar
+          onToggleTOC={() => setShowTOC(true)}
+          onToggleBookmarks={() => setShowBookmarks(true)}
+          onToggleSearch={() => setShowSearch(true)}
+          onToggleSettings={() => setShowSettings(true)}
+          onToggleFullscreen={toggleFullscreen}
+          onToggleReadingMode={toggleReadingMode}
+          settings={settings}
+          onUpdateSettings={updateSettings}
+          isLoading={isLoading}
+          currentChapter={progress.currentChapter}
           chapters={chapters}
-          currentChapter={currentChapter}
-          onSelect={handleChapterSelect}
-          onClose={() => setShowTOC(false)}
+          isFullscreen={isFullscreen}
+          progress={progress}
         />
       )}
 
-      {/* Bookmarks Modal */}
+      {/* Modals */}
+      {showTOC && (
+        <TOCModal
+          chapters={chapters}
+          currentChapter={progress.currentChapter}
+          onSelect={handleChapterSelect}
+          onClose={() => setShowTOC(false)}
+          progress={progress}
+        />
+      )}
+
       {showBookmarks && (
         <BookmarksModal
           bookmarks={bookmarks}
           chapters={chapters}
           onSelect={handleBookmarkSelect}
+          onDelete={deleteBookmark}
+          onUpdateNote={updateBookmarkNote}
+          onUpdateCategory={updateBookmarkCategory}
           onClose={() => setShowBookmarks(false)}
         />
       )}
 
-      {/* Search Modal */}
       {showSearch && (
         <SearchModal
           query={searchQuery}
@@ -1022,39 +1818,83 @@ export default function EPUBReader({ file, onHighlight }: EPUBReaderProps) {
           results={searchResults}
           currentIndex={currentSearchIndex}
           onNavigate={navigateSearchResult}
-          onSelect={handleChapterSelect}
+          onSelect={handleSearchSelect}
           onClose={() => setShowSearch(false)}
+          isSearching={isSearching}
         />
       )}
 
-      {/* Reader Viewport */}
-      <div ref={contentRef} className="flex-1 overflow-auto">
-        <ReaderView
-          content={
-            isLoading || error || chapters.length === 0
-              ? (error ? error : '') // If error, show error message
-              : chapters[currentChapter]?.content || ''
-          }
-          fontSize={fontSize}
-          theme={theme}
-          onNextChapter={handleNextChapter}
-          onPrevChapter={handlePrevChapter}
-          isFirstChapter={currentChapter === 0}
-          isLastChapter={currentChapter === chapters.length - 1}
+      {showSettings && (
+        <SettingsModal
+          settings={settings}
+          onUpdateSettings={updateSettings}
+          onClose={() => setShowSettings(false)}
         />
+      )}
+
+      {/* Reader Content */}
+      <div className="flex-1 overflow-hidden">
+        {error ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <div className="text-red-600 dark:text-red-400 text-xl mb-2">Error Loading Book</div>
+              <div className="text-gray-600 dark:text-gray-400">{error}</div>
+            </div>
+          </div>
+        ) : isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <div className="text-gray-600 dark:text-gray-400">Loading your book...</div>
+            </div>
+          </div>
+        ) : chapters.length > 0 ? (
+          <ReaderView
+            content={chapters[progress.currentChapter]?.content || ''}
+            settings={settings}
+            onNextChapter={handleNextChapter}
+            onPrevChapter={handlePrevChapter}
+            onPageChange={handlePageChange}
+            onTotalPagesChange={handleTotalPagesChange}
+            isFirstChapter={progress.currentChapter === 0}
+            isLastChapter={progress.currentChapter === chapters.length - 1}
+            currentPage={progress.currentPage}
+            totalPages={progress.totalPages}
+            chapterProgress={chapterProgress}
+          />
+        ) : null}
       </div>
 
       {/* Progress Bar */}
-      <ProgressBar progress={progress} />
+      {!isLoading && chapters.length > 0 && settings.readingMode !== 'immersive' && (
+        <ProgressBar 
+          progress={progress} 
+          settings={settings}
+          onToggleStats={() => setShowStats(true)}
+        />
+      )}
 
       {/* Floating Bookmark Button */}
-      <button
-        onClick={toggleBookmark}
-        className="fixed bottom-8 right-8 p-4 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors"
-        aria-label="Toggle Bookmark"
-      >
-        {bookmarks.includes(currentChapter) ? <IoBookmark className="w-6 h-6" /> : <IoBookmark className="w-6 h-6" />}
-      </button>
+      {!isLoading && chapters.length > 0 && (
+        <button
+          onClick={toggleBookmark}
+          className={classNames(
+            'fixed bottom-8 right-8 p-4 rounded-full shadow-xl transition-all duration-300 z-40',
+            {
+              'bg-blue-600 text-white hover:bg-blue-700': !currentBookmark,
+              'bg-yellow-500 text-white hover:bg-yellow-600': currentBookmark,
+              'bottom-4 right-4 p-3': isFullscreen
+            }
+          )}
+          aria-label={currentBookmark ? 'Remove bookmark' : 'Add bookmark'}
+        >
+          {currentBookmark ? (
+            <IoBookmark className="w-6 h-6" />
+          ) : (
+            <IoBookmarkOutline className="w-6 h-6" />
+          )}
+        </button>
+      )}
     </div>
   );
 }
