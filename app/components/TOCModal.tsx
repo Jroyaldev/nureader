@@ -3,6 +3,7 @@
 import React from 'react';
 import classNames from 'classnames';
 import Modal from './Modal';
+import { TOCSkeleton } from './skeletons';
 import { EPUBChapter, ReadingProgress } from './types';
 
 interface TOCModalProps {
@@ -11,6 +12,7 @@ interface TOCModalProps {
   onSelect: (index: number) => void;
   onClose: () => void;
   progress: ReadingProgress;
+  isLoading?: boolean;
 }
 
 const TOCModal = React.memo(({
@@ -18,10 +20,14 @@ const TOCModal = React.memo(({
   currentChapter,
   onSelect,
   onClose,
-  progress
+  progress,
+  isLoading = false
 }: TOCModalProps) => (
   <Modal title="Table of Contents" onClose={onClose} size="large">
-    <div className="grid gap-4">
+    {isLoading ? (
+      <TOCSkeleton />
+    ) : (
+      <div className="grid gap-4">
       {chapters.map((chapter, index) => (
         <div
           key={chapter.id}
@@ -85,7 +91,8 @@ const TOCModal = React.memo(({
           </div>
         </div>
       ))}
-    </div>
+      </div>
+    )}
   </Modal>
 ));
 

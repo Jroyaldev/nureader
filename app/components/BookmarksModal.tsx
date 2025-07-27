@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { IoBookmarkOutline, IoClose } from 'react-icons/io5';
 import classNames from 'classnames';
 import Modal from './Modal';
+import { BookmarksSkeleton } from './skeletons';
 import { BookmarkWithNote, EPUBChapter } from './types';
 
 interface BookmarksModalProps {
@@ -14,6 +15,7 @@ interface BookmarksModalProps {
   onUpdateNote: (bookmarkId: string, note: string) => void;
   onUpdateCategory: (bookmarkId: string, category: string) => void;
   onClose: () => void;
+  isLoading?: boolean;
 }
 
 const BookmarksModal = React.memo(({
@@ -23,7 +25,8 @@ const BookmarksModal = React.memo(({
   onDelete,
   onUpdateNote,
   onUpdateCategory,
-  onClose
+  onClose,
+  isLoading = false
 }: BookmarksModalProps) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   
@@ -34,7 +37,9 @@ const BookmarksModal = React.memo(({
 
   return (
     <Modal title="Bookmarks" onClose={onClose} size="large">
-      {bookmarks.length === 0 ? (
+      {isLoading ? (
+        <BookmarksSkeleton />
+      ) : bookmarks.length === 0 ? (
         <div className="text-center py-12">
           <IoBookmarkOutline className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
           <div className="text-gray-500 dark:text-gray-400">No bookmarks added yet.</div>

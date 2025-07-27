@@ -4,6 +4,7 @@ import React from 'react';
 import { IoSearch, IoChevronBack, IoChevronForward } from 'react-icons/io5';
 import classNames from 'classnames';
 import Modal from './Modal';
+import { SearchSkeleton } from './skeletons';
 import { SearchResult, Highlight } from './types';
 
 interface SearchModalProps {
@@ -99,7 +100,9 @@ const SearchModal = React.memo(({
 
               {/* Results List */}
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {results.map((result, index) => (
+                {isSearching && results.length === 0 ? (
+                  <SearchSkeleton />
+                ) : results.map((result, index) => (
                   <div
                     key={index}
                     className={classNames(

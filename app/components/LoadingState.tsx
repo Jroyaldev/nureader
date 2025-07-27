@@ -2,59 +2,24 @@
 
 import React from 'react';
 import { IoBookOutline } from 'react-icons/io5';
+import { EPUBLoadingSkeleton } from './skeletons';
 
 interface LoadingStateProps {
   progress: number;
   stage: string;
   showSkeleton?: boolean;
+  variant?: 'default' | 'content' | 'minimal';
 }
 
-const LoadingState = React.memo(({ progress, stage, showSkeleton = false }: LoadingStateProps) => {
+const LoadingState = React.memo(({ 
+  progress, 
+  stage, 
+  showSkeleton = false, 
+  variant = 'default' 
+}: LoadingStateProps) => {
+  // Show content skeleton for a more realistic preview
   if (showSkeleton) {
-    return (
-      <div className="h-full p-6 animate-pulse">
-        {/* Controls Skeleton */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex gap-2">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-            ))}
-          </div>
-          <div className="w-48 h-6 bg-gray-200 dark:bg-gray-700 rounded" />
-          <div className="flex gap-2">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-            ))}
-          </div>
-        </div>
-
-        {/* Content Skeleton */}
-        <div className="space-y-6">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-              <div key={i} className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full" />
-            ))}
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
-          </div>
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full" />
-            ))}
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-4/5" />
-          </div>
-        </div>
-
-        {/* Progress Skeleton */}
-        <div className="mt-auto pt-6">
-          <div className="flex justify-between mb-2">
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24" />
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16" />
-          </div>
-          <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded" />
-        </div>
-      </div>
-    );
+    return <EPUBLoadingSkeleton showContent={variant === 'content'} />;
   }
 
   return (

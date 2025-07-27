@@ -7,6 +7,7 @@ import DOMPurify from 'dompurify';
 import { ReadingSettings, Highlight } from './types';
 import styles from './PageTurnAnimation.module.css';
 import HighlightColorPicker from './HighlightColorPicker';
+import { ContentSkeleton, NavigationSkeleton } from './skeletons';
 import { useMobileTouch, useMobileCapabilities, useTouchPerformance } from './useMobileTouch';
 import { 
   getTextSelection, 
@@ -32,6 +33,8 @@ interface ReaderViewProps {
   highlights?: Highlight[];
   onHighlight?: (text: string, color: Highlight['color'], startOffset: number, endOffset: number) => void;
   onHighlightClick?: (highlight: Highlight) => void;
+  isLoading?: boolean;
+  isTransitioning?: boolean;
 }
 
 const ReaderView = React.memo(({
@@ -48,7 +51,9 @@ const ReaderView = React.memo(({
   chapterProgress,
   highlights = [],
   onHighlight,
-  onHighlightClick
+  onHighlightClick,
+  isLoading = false,
+  isTransitioning: isTransitioningProp = false
 }: ReaderViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -70,7 +75,7 @@ const ReaderView = React.memo(({
   const animationType = settings.pageAnimation || (capabilities.isSmallScreen ? 'slide' : 'flip');
 
   const goToPage = useCallback((page: number, smooth = true) => {
-    if (!containerRef.current || isTransitioning) return;
+    if (!containerRef.current || isTransitioning || isTransitioningProp) return;
 
     // Check if we need to change chapters
     if (page < 1) {
@@ -121,7 +126,7 @@ const ReaderView = React.memo(({
       containerRef.current.scrollTop = scrollTop;
       onPageChange(page);
     }
-  }, [isTransitioning, isFirstChapter, isLastChapter, totalPages, currentPage, animationType, onPrevChapter, onNextChapter, onPageChange]);
+  }, [isTransitioning, isTransitioningProp, isFirstChapter, isLastChapter, totalPages, currentPage, animationType, onPrevChapter, onNextChapter, onPageChange]);
 
   const handleHighlightColor = useCallback((color: Highlight['color']) => {
     if (selectedText && selectionRange && onHighlight) {
@@ -385,6 +390,16 @@ const ReaderView = React.memo(({
     immersive: 'max-w-3xl mx-auto'
   };
 
+  // Show skeleton while loading or transitioning
+  if (isLoading || ((isTransitioning || isTransitioningProp) && !content)) {
+    return (
+      <div className="flex flex-col h-full">
+        <NavigationSkeleton />
+        <ContentSkeleton className="flex-1" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div
@@ -398,7 +413,8 @@ const ReaderView = React.memo(({
             [styles.slideAnimation]: animationType === 'slide',
             [styles.fadeAnimation]: animationType === 'fade',
             [styles.flipAnimation]: animationType === 'flip',
-            [styles.pageTurning]: isTransitioning
+            [styles.pageTurning]: isTransitioning || isTransitioningProp,
+            'skeleton-shimmer': (isTransitioning || isTransitioningProp) && content // Show shimmer overlay during transitions
           }
         )}
         {...touchHandlers}
@@ -417,9 +433,9 @@ const ReaderView = React.memo(({
           className={classNames(
             styles.page,
             {
-              [styles.pageActive]: !isTransitioning,
-              [styles.pageTurningForward]: isTransitioning && turnDirection === 'forward',
-              [styles.pageTurningBackward]: isTransitioning && turnDirection === 'backward'
+              [styles.pageActive]: !(isTransitioning || isTransitioningProp),
+              [styles.pageTurningForward]: (isTransitioning || isTransitioningProp) && turnDirection === 'forward',
+              [styles.pageTurningBackward]: (isTransitioning || isTransitioningProp) && turnDirection === 'backward'
             }
           )}
         >

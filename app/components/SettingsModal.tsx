@@ -3,21 +3,27 @@
 import React from 'react';
 import classNames from 'classnames';
 import Modal from './Modal';
+import { SettingsSkeleton } from './skeletons';
 import { ReadingSettings } from './types';
 
 interface SettingsModalProps {
   settings: ReadingSettings;
   onUpdateSettings: (settings: Partial<ReadingSettings>) => void;
   onClose: () => void;
+  isLoading?: boolean;
 }
 
 const SettingsModal = React.memo(({
   settings,
   onUpdateSettings,
-  onClose
+  onClose,
+  isLoading = false
 }: SettingsModalProps) => (
   <Modal title="Reading Settings" onClose={onClose} size="large">
-    <div className="space-y-8">
+    {isLoading ? (
+      <SettingsSkeleton />
+    ) : (
+      <div className="space-y-8">
       {/* Typography Settings */}
       <div>
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Typography</h3>
@@ -278,7 +284,8 @@ const SettingsModal = React.memo(({
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    )}
   </Modal>
 ));
 
