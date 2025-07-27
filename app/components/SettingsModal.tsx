@@ -178,6 +178,31 @@ const SettingsModal = React.memo(({
               className="w-full"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Page Turn Animation
+            </label>
+            <div className="flex gap-2">
+              {(['flip', 'slide', 'fade'] as const).map(animation => (
+                <button
+                  key={animation}
+                  onClick={() => onUpdateSettings({ pageAnimation: animation })}
+                  className={classNames(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    {
+                      'bg-blue-600 text-white': settings.pageAnimation === animation,
+                      'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300': settings.pageAnimation !== animation
+                    }
+                  )}
+                >
+                  {animation.charAt(0).toUpperCase() + animation.slice(1)}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Flip: Realistic page turn effect • Slide: Smooth sliding • Fade: Simple crossfade
+            </p>
+          </div>
         </div>
       </div>
 

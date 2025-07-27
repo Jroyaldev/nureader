@@ -4,15 +4,17 @@ import React from 'react';
 import { IoSearch, IoChevronBack, IoChevronForward } from 'react-icons/io5';
 import classNames from 'classnames';
 import Modal from './Modal';
-import { SearchResult } from './types';
+import { SearchResult, Highlight } from './types';
 
 interface SearchModalProps {
   query: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   results: SearchResult[];
+  highlights?: Highlight[];
   currentIndex: number;
   onNavigate: (direction: 'next' | 'prev') => void;
   onSelect: (chapterIndex: number, position: number) => void;
+  onSelectHighlight?: (highlight: Highlight) => void;
   onClose: () => void;
   isSearching: boolean;
 }
@@ -21,12 +23,32 @@ const SearchModal = React.memo(({
   query,
   onChange,
   results,
+  highlights = [],
   currentIndex,
   onNavigate,
   onSelect,
+  onSelectHighlight,
   onClose,
   isSearching
-}: SearchModalProps) => (
+}: SearchModalProps) => {
+  // Filter highlights that match the search query
+  const filteredHighlights = highlights.filter(h => 
+    h.text.toLowerCase().includes(query.toLowerCase()) ||
+    (h.note && h.note.toLowerCase().includes(query.toLowerCase()))
+  );
+
+  const getHighlightColorClass = (color: Highlight['color']) => {
+    const colorClasses = {
+      yellow: 'bg-yellow-200 dark:bg-yellow-800',
+      green: 'bg-green-200 dark:bg-green-800',
+      blue: 'bg-blue-200 dark:bg-blue-800',
+      pink: 'bg-pink-200 dark:bg-pink-800',
+      orange: 'bg-orange-200 dark:bg-orange-800'
+    };
+    return colorClasses[color];
+  };
+
+  return (
   <Modal title="Search" onClose={onClose} size="large">
     <div className="space-y-6">
       {/* Search Input */}
@@ -111,9 +133,47 @@ const SearchModal = React.memo(({
           )}
         </>
       )}
+
+      {/* Highlights Section */}
+      {query && filteredHighlights.length > 0 && (
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Matching Highlights ({filteredHighlights.length})
+          </h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {filteredHighlights.map((highlight) => (
+              <div
+                key={highlight.id}
+                className="p-3 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                onClick={() => onSelectHighlight?.(highlight)}
+              >
+                <div
+                  className={classNames(
+                    'p-2 rounded-md mb-2',
+                    getHighlightColorClass(highlight.color)
+                  )}
+                >
+                  <p className="text-gray-900 dark:text-gray-100 text-sm">
+                    "{highlight.text}"
+                  </p>
+                </div>
+                {highlight.note && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400 italic">
+                    {highlight.note}
+                  </p>
+                )}
+                <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                  Chapter {highlight.chapterIndex + 1} • {new Date(highlight.createdAt).toLocaleDateString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   </Modal>
-));
+  );
+});
 
 SearchModal.displayName = 'SearchModal';
 

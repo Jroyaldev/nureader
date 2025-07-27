@@ -664,23 +664,403 @@
   /* === RESPONSIVE IMPROVEMENTS === */
   @media (max-width: 768px) {
     .control-button {
-      @apply p-2;
+      @apply p-2 min-h-[44px] min-w-[44px];
+      touch-action: manipulation;
     }
     
     .reader-controls-bar {
       @apply px-4 py-3;
+      /* Ensure controls don't interfere with safe areas */
+      padding-top: max(12px, env(safe-area-inset-top));
     }
     
     .reader-progress-bar {
       @apply px-4 py-3;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
     }
     
     .reader-navigation-controls {
       @apply px-4 py-3;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
     }
     
     .floating-button {
       @apply p-3 bottom-6 right-6;
+      bottom: max(24px, calc(env(safe-area-inset-bottom) + 24px));
+      right: max(24px, calc(env(safe-area-inset-right) + 24px));
+    }
+    
+    /* Enhanced touch targets */
+    .btn, .btn-primary, .btn-secondary, .btn-ghost {
+      @apply min-h-[44px];
+      touch-action: manipulation;
+    }
+    
+    /* Optimize text selection on mobile */
+    .reading-content {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      -khtml-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+    }
+    
+    .text-selection-active {
+      -webkit-touch-callout: text;
+      -webkit-user-select: text;
+      -khtml-user-select: text;
+      -moz-user-select: text;
+      -ms-user-select: text;
+      user-select: text;
+    }
+    
+    /* Mobile modal optimizations */
+    .modal-content {
+      @apply rounded-t-3xl rounded-b-none;
+      max-height: 85vh;
+      transform: translateY(100%);
+      animation: slide-up-mobile 0.3s ease-out forwards;
+    }
+    
+    @keyframes slide-up-mobile {
+      to {
+        transform: translateY(0);
+      }
+    }
+  }
+  
+  /* === PAGE TURN ANIMATION ENHANCEMENTS === */
+  .page-turn-container {
+    @apply relative overflow-hidden;
+    perspective: 2000px;
+    transform-style: preserve-3d;
+  }
+  
+  .page-content {
+    @apply w-full h-full;
+    backface-visibility: hidden;
+  }
+  
+  /* Smooth page transitions */
+  .page-transition-active {
+    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+  }
+  
+  /* Touch feedback */
+  .page-swipe-hint {
+    @apply absolute top-1/2 transform -translate-y-1/2 opacity-0 transition-opacity duration-300;
+    @apply text-gray-400 dark:text-gray-600;
+  }
+  
+  .page-swipe-hint.left {
+    @apply left-4;
+  }
+  
+  .page-swipe-hint.right {
+    @apply right-4;
+  }
+  
+  .page-container:hover .page-swipe-hint {
+    @apply opacity-100;
+  }
+  
+  /* Page edge shadow for realism */
+  .page-edge-shadow {
+    @apply absolute inset-y-0 w-4 opacity-0 transition-opacity duration-300;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.1), transparent);
+  }
+  
+  .page-edge-shadow.left {
+    @apply left-0;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.1), transparent);
+  }
+  
+  .page-edge-shadow.right {
+    @apply right-0;
+    background: linear-gradient(to left, rgba(0, 0, 0, 0.1), transparent);
+  }
+  
+  .page-turning .page-edge-shadow {
+    @apply opacity-100;
+  }
+  
+  /* === HIGHLIGHT SYSTEM === */
+  /* Text selection highlighting */
+  mark[data-highlight-id] {
+    @apply cursor-pointer transition-all duration-200;
+    border-radius: 2px;
+    position: relative;
+    /* Enhanced touch targets on mobile */
+    min-height: 1.5em;
+    display: inline-block;
+    line-height: inherit;
+  }
+  
+  mark[data-highlight-id]:hover {
+    @apply shadow-sm;
+    filter: brightness(0.95);
+  }
+  
+  mark[data-highlight-id]:active {
+    @apply transform scale-[0.99];
+  }
+  
+  /* Mobile-specific highlight styles */
+  @media (max-width: 768px) {
+    mark[data-highlight-id] {
+      /* Larger touch targets on mobile */
+      padding: 2px 0;
+      margin: 1px 0;
+    }
+    
+    mark[data-highlight-id]:hover {
+      transform: none; /* Disable hover transforms on touch devices */
+    }
+  }
+  
+  /* Highlight color classes */
+  .highlight-yellow {
+    @apply bg-yellow-200 dark:bg-yellow-700/50;
+  }
+  
+  .highlight-green {
+    @apply bg-green-200 dark:bg-green-700/50;
+  }
+  
+  .highlight-blue {
+    @apply bg-blue-200 dark:bg-blue-700/50;
+  }
+  
+  .highlight-pink {
+    @apply bg-pink-200 dark:bg-pink-700/50;
+  }
+  
+  .highlight-orange {
+    @apply bg-orange-200 dark:bg-orange-700/50;
+  }
+  
+  /* Highlight pulse animation for navigation */
+  @keyframes highlight-pulse {
+    0%, 100% { 
+      box-shadow: 0 0 0 0 rgb(var(--primary) / 0.4);
+      transform: scale(1);
+    }
+    50% { 
+      box-shadow: 0 0 0 8px rgb(var(--primary) / 0);
+      transform: scale(1.02);
+    }
+  }
+  
+  .highlight-pulse {
+    animation: highlight-pulse 2s ease-in-out;
+  }
+  
+  /* Text selection visual improvements */
+  .text-selection-active {
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+  }
+  
+  /* Color picker positioning */
+  .highlight-color-picker {
+    @apply absolute z-50 bg-white dark:bg-gray-800;
+    @apply rounded-lg shadow-xl border border-gray-200 dark:border-gray-700;
+    @apply p-2 animate-fade-in;
+    transform: translateX(-50%) translateY(-100%) translateY(-10px);
+  }
+  
+  /* Mobile selection handles */
+  @media (max-width: 768px) {
+    .mobile-selection-handle {
+      @apply absolute w-6 h-6 bg-primary rounded-full;
+      @apply border-3 border-white dark:border-gray-800;
+      @apply shadow-lg z-40;
+      transform: translate(-50%, -50%);
+      touch-action: manipulation;
+    }
+    
+    .mobile-selection-handle:before {
+      content: '';
+      @apply absolute inset-0 rounded-full;
+      @apply animate-ping bg-primary opacity-75;
+    }
+    
+    .mobile-selection-handle:after {
+      content: '';
+      @apply absolute inset-1 rounded-full bg-white dark:bg-gray-800;
+    }
+  }
+  
+  /* Highlight management modal enhancements */
+  .highlight-item {
+    @apply group relative p-4 border border-gray-200 dark:border-gray-700;
+    @apply rounded-lg hover:shadow-md transition-all cursor-pointer;
+  }
+  
+  .highlight-item:hover {
+    @apply transform -translate-y-1;
+  }
+  
+  .highlight-item .highlight-actions {
+    @apply opacity-0 group-hover:opacity-100 transition-opacity duration-200;
+  }
+  
+  .highlight-snippet {
+    @apply p-3 rounded-md cursor-pointer transition-all duration-200;
+  }
+  
+  .highlight-snippet:hover {
+    @apply transform scale-[1.01] shadow-sm;
+  }
+  
+  /* === MOBILE PERFORMANCE OPTIMIZATIONS === */
+  @media (max-width: 768px) {
+    /* Enable hardware acceleration for smoother scrolling */
+    .reader-container,
+    .modal-content,
+    .page-container {
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      -webkit-perspective: 1000px;
+      perspective: 1000px;
+    }
+    
+    /* Optimize touch scrolling */
+    .overflow-auto,
+    .overflow-y-auto {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    
+    /* Prevent zoom on input focus */
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    textarea {
+      font-size: 16px;
+    }
+    
+    /* Touch feedback optimization */
+    .control-button,
+    .btn,
+    .floating-button {
+      -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+      tap-highlight-color: rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Gesture handling optimizations */
+    .reader-view {
+      touch-action: pan-y pinch-zoom;
+    }
+    
+    .swipe-area {
+      touch-action: pan-x;
+    }
+    
+    .pinch-zoom-area {
+      touch-action: pinch-zoom;
+    }
+    
+    /* Reduce motion for better performance on lower-end devices */
+    @media (max-device-width: 480px) {
+      .animate-in,
+      .animate-fade-in,
+      .animate-slide-up,
+      .transition-all,
+      .transition-transform {
+        transition-duration: 150ms;
+      }
+    }
+  }
+  
+  /* === TOUCH DEVICE OPTIMIZATIONS === */
+  @media (hover: none) and (pointer: coarse) {
+    /* Remove hover effects on touch devices */
+    .control-button:hover,
+    .btn:hover,
+    .card:hover {
+      transform: none;
+      box-shadow: inherit;
+    }
+    
+    /* Use active states instead */
+    .control-button:active,
+    .btn:active {
+      transform: scale(0.95);
+      opacity: 0.8;
+    }
+    
+    /* Larger touch targets */
+    .control-button,
+    .btn-icon {
+      min-width: 44px;
+      min-height: 44px;
+    }
+  }
+  
+  /* === VIEWPORT META OPTIMIZATIONS === */
+  @supports (height: 100dvh) {
+    .h-screen,
+    .min-h-screen {
+      height: 100dvh;
+      min-height: 100dvh;
+    }
+  }
+  
+  /* === PWA OPTIMIZATIONS === */
+  @media (display-mode: standalone) {
+    /* Adjust for PWA mode */
+    .reader-controls-bar {
+      padding-top: max(16px, env(safe-area-inset-top));
+    }
+    
+    .floating-button {
+      bottom: max(32px, calc(env(safe-area-inset-bottom) + 32px));
+    }
+  }
+  
+  /* === ACCESSIBILITY IMPROVEMENTS FOR MOBILE === */
+  @media (max-width: 768px) {
+    /* Ensure focus indicators are visible on touch devices */
+    .focus-visible:focus,
+    *:focus-visible {
+      outline: 3px solid rgb(var(--primary));
+      outline-offset: 2px;
+    }
+    
+    /* High contrast mode support */
+    @media (prefers-contrast: high) {
+      .control-button,
+      .btn {
+        border: 2px solid currentColor;
+      }
+      
+      mark[data-highlight-id] {
+        border: 1px solid currentColor;
+      }
+    }
+    
+    /* Reduce motion for accessibility */
+    @media (prefers-reduced-motion: reduce) {
+      .animate-in,
+      .animate-fade-in,
+      .animate-slide-up,
+      .transition-all,
+      .transition-transform,
+      .transform {
+        animation: none !important;
+        transition: none !important;
+        transform: none !important;
+      }
+      
+      .page-turn-container {
+        perspective: none;
+      }
     }
   }
 }

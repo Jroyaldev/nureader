@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { IoBookmarkOutline, IoBookmark, IoSettings, IoEye } from 'react-icons/io5';
 import debounce from 'lodash.debounce';
 import classNames from 'classnames';
+import { useMobileCapabilities } from './useMobileTouch';
 
 // Import optimized components
 import ErrorBoundary from './ErrorBoundary';
@@ -13,10 +14,12 @@ import TOCModal from './TOCModal';
 import BookmarksModal from './BookmarksModal';
 import SearchModal from './SearchModal';
 import SettingsModal from './SettingsModal';
+import HighlightsModal from './HighlightsModal';
 import ReaderView from './ReaderView';
 import LoadingState from './LoadingState';
 import { useEPUBLoader } from './useEPUBLoader';
 import { useToast } from './useToast';
+import { useHighlights } from './useHighlights';
 import { ToastContainer } from './Toast';
 import {
   EPUBChapter,
@@ -24,7 +27,8 @@ import {
   BookmarkWithNote,
   ReadingSettings,
   ReadingProgress,
-  SearchResult
+  SearchResult,
+  Highlight
 } from './types';
 
 interface EPUBReaderProps {
@@ -41,6 +45,9 @@ interface EPUBReaderProps {
 
 
 const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
+  // Mobile capabilities
+  const capabilities = useMobileCapabilities();
+  
   // Core state
   const [chapters, setChapters] = useState<EPUBChapter[]>([]);
   const [resources, setResources] = useState<Map<string, EPUBResource>>(new Map());
@@ -57,6 +64,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHighlights, setShowHighlights] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -87,14 +95,27 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         theme: 'light',
         backgroundMusic: false,
         autoPageTurn: false,
-        readingGoal: 30
+        readingGoal: 30,
+        pageAnimation: 'flip'
       };
     }
     
     const stored = localStorage.getItem('epub-settings');
     if (stored) {
-      return { ...JSON.parse(stored) };
+      const parsedSettings = JSON.parse(stored);
+      // Add default animation if not present
+      if (!parsedSettings.pageAnimation) {
+        // Auto-detect based on device/preferences
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        parsedSettings.pageAnimation = prefersReducedMotion ? 'fade' : (isMobile ? 'slide' : 'flip');
+      }
+      return parsedSettings;
     }
+    
+    // Auto-detect animation type for new users
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
     
     return {
       fontSize: 16,
@@ -108,7 +129,8 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
       backgroundMusic: false,
       autoPageTurn: false,
-      readingGoal: 30
+      readingGoal: 30,
+      pageAnimation: prefersReducedMotion ? 'fade' : (isMobile ? 'slide' : 'flip')
     };
   });
 
@@ -129,6 +151,18 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
+
+  // Highlights using custom hook (use file name as book ID)
+  const bookId = file?.name.replace(/\.epub$/i, '') || 'unknown';
+  const {
+    highlights,
+    addHighlight,
+    updateHighlight,
+    deleteHighlight,
+    getHighlightsForChapter,
+    exportHighlights,
+    importHighlights
+  } = useHighlights(bookId);
 
   // Update settings handler
   const updateSettings = useCallback((newSettings: Partial<ReadingSettings>) => {
@@ -377,6 +411,42 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     setShowSearch(false);
   }, []);
 
+  // Highlight handlers
+  const handleHighlightCreate = useCallback((text: string, color: Highlight['color'], startOffset: number, endOffset: number) => {
+    const highlight = addHighlight({
+      chapterIndex: progress.currentChapter,
+      text,
+      color,
+      startOffset,
+      endOffset,
+      pageNumber: progress.currentPage
+    });
+    
+    // Call the original onHighlight callback for AI analysis
+    if (onHighlight) {
+      onHighlight(text);
+    }
+    
+    return highlight;
+  }, [progress.currentChapter, progress.currentPage, addHighlight, onHighlight]);
+
+  const handleHighlightSelect = useCallback((chapterIndex: number, startOffset: number) => {
+    setProgress(prev => ({
+      ...prev,
+      currentChapter: chapterIndex,
+      currentPage: 1 // Will be calculated based on highlight position
+    }));
+    setShowHighlights(false);
+  }, []);
+
+  const handleHighlightUpdateNote = useCallback((id: string, note: string) => {
+    updateHighlight(id, { note });
+  }, [updateHighlight]);
+
+  const handleHighlightUpdateColor = useCallback((id: string, color: Highlight['color']) => {
+    updateHighlight(id, { color });
+  }, [updateHighlight]);
+
   // Fullscreen handling
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -437,6 +507,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         setShowBookmarks(false);
         setShowSearch(false);
         setShowSettings(false);
+        setShowHighlights(false);
         setShowStats(false);
         return;
       }
@@ -455,6 +526,10 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
           case 'f':
             e.preventDefault();
             setShowSearch(true);
+            break;
+          case 'h':
+            e.preventDefault();
+            setShowHighlights(true);
             break;
           case ',':
             e.preventDefault();
@@ -496,6 +571,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         onToggleBookmarks={() => setShowBookmarks(true)}
         onToggleSearch={() => setShowSearch(true)}
         onToggleSettings={() => setShowSettings(true)}
+        onToggleHighlights={() => setShowHighlights(true)}
         onToggleFullscreen={toggleFullscreen}
         onToggleReadingMode={toggleReadingMode}
         settings={settings}
@@ -509,20 +585,46 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       
       {/* Immersive Mode Floating Controls */}
       {settings.readingMode === 'immersive' && (
-        <div className="fixed top-4 right-4 z-40 flex gap-2 opacity-20 hover:opacity-100 transition-opacity duration-300">
+        <div className={classNames(
+          'fixed z-40 flex gap-2 transition-opacity duration-300',
+          {
+            'top-4 right-4': !capabilities.isSmallScreen,
+            'top-2 right-2': capabilities.isSmallScreen,
+            'opacity-20 hover:opacity-100': !capabilities.isTouchDevice,
+            'opacity-60': capabilities.isTouchDevice
+          }
+        )}>
           <button
             onClick={() => setShowSettings(true)}
-            className="control-button group bg-black/20 backdrop-blur-sm"
+            className={classNames(
+              'control-button group bg-black/20 backdrop-blur-sm',
+              {
+                'p-3': !capabilities.isSmallScreen,
+                'p-2 min-h-[44px] min-w-[44px]': capabilities.isSmallScreen
+              }
+            )}
             aria-label="Settings"
           >
-            <IoSettings className="w-4 h-4 text-white" />
+            <IoSettings className={classNames({
+              'w-4 h-4': !capabilities.isSmallScreen,
+              'w-5 h-5': capabilities.isSmallScreen
+            }, 'text-white')} />
           </button>
           <button
             onClick={toggleReadingMode}
-            className="control-button group bg-black/20 backdrop-blur-sm"
+            className={classNames(
+              'control-button group bg-black/20 backdrop-blur-sm',
+              {
+                'p-3': !capabilities.isSmallScreen,
+                'p-2 min-h-[44px] min-w-[44px]': capabilities.isSmallScreen
+              }
+            )}
             aria-label="Exit Immersive Mode"
           >
-            <IoEye className="w-4 h-4 text-white" />
+            <IoEye className={classNames({
+              'w-4 h-4': !capabilities.isSmallScreen,
+              'w-5 h-5': capabilities.isSmallScreen
+            }, 'text-white')} />
           </button>
         </div>
       )}
@@ -555,9 +657,18 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
           query={searchQuery}
           onChange={handleSearchChange}
           results={searchResults}
+          highlights={highlights}
           currentIndex={currentSearchIndex}
           onNavigate={navigateSearchResult}
           onSelect={handleSearchSelect}
+          onSelectHighlight={(highlight) => {
+            setProgress(prev => ({
+              ...prev,
+              currentChapter: highlight.chapterIndex,
+              currentPage: 1
+            }));
+            setShowSearch(false);
+          }}
           onClose={() => setShowSearch(false)}
           isSearching={isSearching}
         />
@@ -568,6 +679,20 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
           settings={settings}
           onUpdateSettings={updateSettings}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {showHighlights && (
+        <HighlightsModal
+          highlights={highlights}
+          chapters={chapters}
+          onSelect={handleHighlightSelect}
+          onDelete={deleteHighlight}
+          onUpdateNote={handleHighlightUpdateNote}
+          onUpdateColor={handleHighlightUpdateColor}
+          onExport={exportHighlights}
+          onImport={importHighlights}
+          onClose={() => setShowHighlights(false)}
         />
       )}
 
@@ -600,6 +725,8 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
               currentPage={progress.currentPage}
               totalPages={progress.totalPages}
               chapterProgress={chapterProgress}
+              highlights={getHighlightsForChapter(progress.currentChapter)}
+              onHighlight={handleHighlightCreate}
             />
           ) : null}
         </div>
@@ -627,20 +754,31 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         <button
           onClick={toggleBookmark}
           className={classNames(
-            'fixed bottom-8 right-8 p-4 rounded-full shadow-xl transition-all duration-300 z-40 backdrop-blur-sm',
+            'fixed rounded-full shadow-xl transition-all duration-300 z-40 backdrop-blur-sm',
             {
-              'bg-blue-600/90 text-white hover:bg-blue-700/90 hover:scale-110': !currentBookmark,
-              'bg-yellow-500/90 text-white hover:bg-yellow-600/90 hover:scale-110': currentBookmark,
+              'bg-blue-600/90 text-white hover:bg-blue-700/90': !currentBookmark,
+              'bg-yellow-500/90 text-white hover:bg-yellow-600/90': currentBookmark,
+              'bottom-8 right-8 p-4': !capabilities.isSmallScreen && !isFullscreen,
+              'bottom-6 right-6 p-3 min-h-[56px] min-w-[56px]': capabilities.isSmallScreen && !isFullscreen,
               'bottom-4 right-4 p-3': isFullscreen,
-              'opacity-30 hover:opacity-100': settings.readingMode === 'immersive'
+              'opacity-30 hover:opacity-100': settings.readingMode === 'immersive' && !capabilities.isTouchDevice,
+              'opacity-80': settings.readingMode === 'immersive' && capabilities.isTouchDevice,
+              'hover:scale-110': !capabilities.isTouchDevice,
+              'active:scale-95': capabilities.isTouchDevice
             }
           )}
           aria-label={currentBookmark ? 'Remove bookmark' : 'Add bookmark'}
         >
           {currentBookmark ? (
-            <IoBookmark className="w-6 h-6" />
+            <IoBookmark className={classNames({
+              'w-6 h-6': !capabilities.isSmallScreen,
+              'w-5 h-5': capabilities.isSmallScreen
+            })} />
           ) : (
-            <IoBookmarkOutline className="w-6 h-6" />
+            <IoBookmarkOutline className={classNames({
+              'w-6 h-6': !capabilities.isSmallScreen,
+              'w-5 h-5': capabilities.isSmallScreen
+            })} />
           )}
         </button>
       )}

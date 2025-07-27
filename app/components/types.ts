@@ -38,6 +38,7 @@ export interface ReadingSettings {
   backgroundMusic: boolean;
   autoPageTurn: boolean;
   readingGoal: number;
+  pageAnimation?: 'flip' | 'slide' | 'fade';
 }
 
 export interface ReadingProgress {
@@ -55,4 +56,23 @@ export interface SearchResult {
   chapterIndex: number;
   snippet: string;
   position: number;
+}
+
+export interface Highlight {
+  id: string;
+  chapterIndex: number;
+  text: string;
+  color: 'yellow' | 'green' | 'blue' | 'pink' | 'orange';
+  startOffset: number;
+  endOffset: number;
+  note?: string;
+  createdAt: number;
+  pageNumber?: number;
+}
+
+export interface HighlightRange {
+  startContainer: Node;
+  startOffset: number;
+  endContainer: Node;
+  endOffset: number;
 }

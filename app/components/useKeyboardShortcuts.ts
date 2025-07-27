@@ -7,6 +7,7 @@ interface KeyboardShortcutsConfig {
   onToggleBookmarks: () => void;
   onToggleSearch: () => void;
   onToggleSettings: () => void;
+  onToggleHighlights?: () => void;
   onToggleFullscreen: () => void;
   onToggleBookmark: () => void;
   onCloseModals: () => void;
@@ -18,6 +19,7 @@ export const useKeyboardShortcuts = (config: KeyboardShortcutsConfig) => {
     onToggleBookmarks,
     onToggleSearch,
     onToggleSettings,
+    onToggleHighlights,
     onToggleFullscreen,
     onToggleBookmark,
     onCloseModals
@@ -50,6 +52,10 @@ export const useKeyboardShortcuts = (config: KeyboardShortcutsConfig) => {
           e.preventDefault();
           onToggleSearch();
           break;
+        case 'h':
+          e.preventDefault();
+          onToggleHighlights?.();
+          break;
         case ',':
           e.preventDefault();
           onToggleSettings();
@@ -65,6 +71,7 @@ export const useKeyboardShortcuts = (config: KeyboardShortcutsConfig) => {
     onToggleBookmarks,
     onToggleSearch,
     onToggleSettings,
+    onToggleHighlights,
     onToggleFullscreen,
     onToggleBookmark,
     onCloseModals
