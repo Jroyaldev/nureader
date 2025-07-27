@@ -256,6 +256,47 @@ export const useMobileTouch = (config: MobileTouchConfig) => {
   };
 };
 
+// Hook for debounced navigation to prevent double-clicks
+export const useDebouncedNavigation = (callback: () => void, delay: number = 300) => {
+  const lastExecutionTime = useRef(0);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const debouncedCallback = useCallback(() => {
+    const now = Date.now();
+    const timeSinceLastExecution = now - lastExecutionTime.current;
+
+    // Clear any pending timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    // If enough time has passed, execute immediately
+    if (timeSinceLastExecution >= delay) {
+      lastExecutionTime.current = now;
+      callback();
+    } else {
+      // Otherwise, schedule execution
+      const remainingDelay = delay - timeSinceLastExecution;
+      timeoutRef.current = setTimeout(() => {
+        lastExecutionTime.current = Date.now();
+        callback();
+      }, remainingDelay);
+    }
+  }, [callback, delay]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return debouncedCallback;
+};
+
 // Hook for detecting mobile device capabilities
 export const useMobileCapabilities = () => {
   const [capabilities, setCapabilities] = useState({

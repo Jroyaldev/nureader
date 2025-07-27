@@ -79,6 +79,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     sessionsToday: 1,
     streak: 1
   });
+  const [chapterProgress, setChapterProgress] = useState(0);
 
   // Settings with local storage persistence
   const [settings, setSettings] = useState<ReadingSettings>(() => {
@@ -293,9 +294,9 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     if (progress.currentChapter > 0) {
       setProgress(prev => ({
         ...prev,
-        currentChapter: prev.currentChapter - 1,
-        currentPage: 1
+        currentChapter: prev.currentChapter - 1
       }));
+      setChapterProgress(0);
     }
   }, [progress.currentChapter]);
 
@@ -303,42 +304,30 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     if (progress.currentChapter < chapters.length - 1) {
       setProgress(prev => ({
         ...prev,
-        currentChapter: prev.currentChapter + 1,
-        currentPage: 1
+        currentChapter: prev.currentChapter + 1
       }));
+      setChapterProgress(0);
     }
   }, [progress.currentChapter, chapters.length]);
 
   const handleChapterSelect = useCallback((index: number) => {
     setProgress(prev => ({
       ...prev,
-      currentChapter: index,
-      currentPage: 1
+      currentChapter: index
     }));
+    setChapterProgress(0);
     setShowTOC(false);
     setShowBookmarks(false);
   }, []);
 
-  const handlePageChange = useCallback((page: number) => {
-    setProgress(prev => ({
-      ...prev,
-      currentPage: page
-    }));
-  }, []);
-
-  const handleTotalPagesChange = useCallback((totalPages: number) => {
-    setProgress(prev => ({
-      ...prev,
-      totalPages: totalPages
-    }));
+  const handleProgressChange = useCallback((progress: number) => {
+    setChapterProgress(progress);
   }, []);
 
   // Bookmark handlers
   const toggleBookmark = useCallback(() => {
-    const bookmarkId = `${progress.currentChapter}-${progress.currentPage}-${Date.now()}`;
-    const currentPosition = progress.totalPages > 0 
-      ? Math.round((progress.currentPage / progress.totalPages) * 100) 
-      : 0;
+    const bookmarkId = `${progress.currentChapter}-${chapterProgress}-${Date.now()}`;
+    const currentPosition = Math.round(chapterProgress);
     
     const existingBookmark = bookmarks.find(b => 
       b.chapterIndex === progress.currentChapter && 
@@ -360,7 +349,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       setBookmarks(prev => [...prev, newBookmark]);
       success('Bookmark added', `Bookmarked ${chapters[progress.currentChapter]?.title || 'chapter'}`);
     }
-  }, [progress, bookmarks, success, chapters]);
+  }, [progress.currentChapter, chapterProgress, bookmarks, success, chapters]);
 
   const updateBookmarkNote = useCallback((bookmarkId: string, note: string) => {
     setBookmarks(prev => prev.map(b => b.id === bookmarkId ? { ...b, note } : b));
@@ -380,11 +369,9 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
   const handleBookmarkSelect = useCallback((chapterIndex: number, position: number) => {
     setProgress(prev => ({
       ...prev,
-      currentChapter: chapterIndex,
-      currentPage: prev.totalPages > 0 
-        ? Math.max(1, Math.round((position / 100) * prev.totalPages))
-        : 1
+      currentChapter: chapterIndex
     }));
+    setChapterProgress(position);
     setShowBookmarks(false);
   }, []);
 
@@ -403,11 +390,9 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
   const handleSearchSelect = useCallback((chapterIndex: number, position: number) => {
     setProgress(prev => ({
       ...prev,
-      currentChapter: chapterIndex,
-      currentPage: prev.totalPages > 0 
-        ? Math.max(1, Math.round((position / 100) * prev.totalPages))
-        : 1
+      currentChapter: chapterIndex
     }));
+    setChapterProgress(position);
     setShowSearch(false);
   }, []);
 
@@ -419,7 +404,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       color,
       startOffset,
       endOffset,
-      pageNumber: progress.currentPage
+      pageNumber: 1 // Not used in continuous scroll mode
     });
     
     // Call the original onHighlight callback for AI analysis
@@ -428,14 +413,14 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     }
     
     return highlight;
-  }, [progress.currentChapter, progress.currentPage, addHighlight, onHighlight]);
+  }, [progress.currentChapter, addHighlight, onHighlight]);
 
   const handleHighlightSelect = useCallback((chapterIndex: number, startOffset: number) => {
     setProgress(prev => ({
       ...prev,
-      currentChapter: chapterIndex,
-      currentPage: 1 // Will be calculated based on highlight position
+      currentChapter: chapterIndex
     }));
+    // TODO: Scroll to highlight position
     setShowHighlights(false);
   }, []);
 
@@ -447,22 +432,39 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     updateHighlight(id, { color });
   }, [updateHighlight]);
 
-  // Fullscreen handling
+  // Fullscreen handling with better error handling and fallbacks
   const toggleFullscreen = useCallback(async () => {
     try {
       if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
-        setIsFullscreen(true);
+        // Try multiple fullscreen API methods for better compatibility
+        const elem = document.getElementById('reader-container') || document.documentElement;
+        if (elem.requestFullscreen) {
+          await elem.requestFullscreen();
+        } else if ((elem as any).webkitRequestFullscreen) {
+          await (elem as any).webkitRequestFullscreen();
+        } else if ((elem as any).mozRequestFullScreen) {
+          await (elem as any).mozRequestFullScreen();
+        } else if ((elem as any).msRequestFullscreen) {
+          await (elem as any).msRequestFullscreen();
+        } else {
+          throw new Error('Fullscreen API not supported');
+        }
       } else {
-        await document.exitFullscreen();
-        setIsFullscreen(false);
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        } else if ((document as any).mozCancelFullScreen) {
+          await (document as any).mozCancelFullScreen();
+        } else if ((document as any).msExitFullscreen) {
+          await (document as any).msExitFullscreen();
+        }
       }
     } catch (err) {
       console.warn('Fullscreen operation failed:', err);
-      // Fallback: just toggle the state for styling purposes
-      setIsFullscreen(prev => !prev);
+      showError('Fullscreen not supported', 'This feature may not be available on your device');
     }
-  }, []);
+  }, [showError]);
 
   // Reading mode cycling
   const toggleReadingMode = useCallback(() => {
@@ -478,14 +480,14 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     
     // Calculate progress based on chapters completed + current chapter progress
     const chaptersCompleted = progress.currentChapter;
-    const currentChapterProgress = progress.totalPages > 0 ? (progress.currentPage - 1) / progress.totalPages : 0;
-    const overallProgress = ((chaptersCompleted + currentChapterProgress) / chapters.length) * 100;
+    const currentChapterProgressFraction = chapterProgress / 100;
+    const overallProgress = ((chaptersCompleted + currentChapterProgressFraction) / chapters.length) * 100;
     
     // Calculate words read
     const wordsReadFromCompletedChapters = chapters.slice(0, progress.currentChapter)
       .reduce((total, chapter) => total + chapter.wordCount, 0);
     
-    const wordsReadFromCurrentChapter = (chapters[progress.currentChapter]?.wordCount || 0) * currentChapterProgress;
+    const wordsReadFromCurrentChapter = (chapters[progress.currentChapter]?.wordCount || 0) * currentChapterProgressFraction;
     
     const totalWordsRead = wordsReadFromCompletedChapters + wordsReadFromCurrentChapter;
 
@@ -494,9 +496,40 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       overallProgress: Math.min(100, Math.max(0, overallProgress)),
       wordsRead: Math.round(totalWordsRead)
     }));
-  }, [progress.currentChapter, progress.currentPage, progress.totalPages, chapters]);
+  }, [progress.currentChapter, chapterProgress, chapters]);
 
   // Keyboard shortcuts
+  // Handle fullscreen change events with proper state sync
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isNowFullscreen = !!(document.fullscreenElement || 
+                                 (document as any).webkitFullscreenElement || 
+                                 (document as any).mozFullScreenElement || 
+                                 (document as any).msFullscreenElement);
+      setIsFullscreen(isNowFullscreen);
+      
+      // Force a re-render to ensure content is visible
+      if (isNowFullscreen) {
+        // Small delay to ensure DOM is ready
+        setTimeout(() => {
+          window.dispatchEvent(new Event('resize'));
+        }, 100);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('msfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -555,16 +588,17 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
            Math.abs(b.position - currentPosition) < 5;
   });
 
-  const chapterProgress = progress.totalPages > 0 ? (progress.currentPage / progress.totalPages) * 100 : 0;
 
   return (
-    <div className={classNames(
-      'flex flex-col h-full transition-all duration-300',
-      {
-        'fixed inset-0 z-50': isFullscreen,
-        [settings.theme]: true
-      }
-    )}>
+    <div 
+      id="reader-container"
+      className={classNames(
+        'flex flex-col h-screen transition-all duration-300',
+        {
+          'bg-background': true,
+          [settings.theme]: true
+        }
+      )}>
       {/* Controls */}
       <ControlsBar
         onToggleTOC={() => setShowTOC(true)}
@@ -698,7 +732,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
 
       {/* Reader Content */}
       <ErrorBoundary>
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 flex flex-col">
           {error ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
@@ -714,19 +748,19 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
             />
           ) : chapters.length > 0 ? (
             <ReaderView
+              key={`${progress.currentChapter}-${isFullscreen}`} // Force re-render on fullscreen change
               content={chapters[progress.currentChapter]?.content || ''}
               settings={settings}
               onNextChapter={handleNextChapter}
               onPrevChapter={handlePrevChapter}
-              onPageChange={handlePageChange}
-              onTotalPagesChange={handleTotalPagesChange}
+              onProgressChange={handleProgressChange}
               isFirstChapter={progress.currentChapter === 0}
               isLastChapter={progress.currentChapter === chapters.length - 1}
-              currentPage={progress.currentPage}
-              totalPages={progress.totalPages}
               chapterProgress={chapterProgress}
               highlights={getHighlightsForChapter(progress.currentChapter)}
               onHighlight={handleHighlightCreate}
+              isLoading={false}
+              isTransitioning={false}
             />
           ) : null}
         </div>
@@ -737,8 +771,10 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         <div className={classNames(
           'transition-all duration-300',
           {
-            'opacity-0 hover:opacity-100': settings.readingMode === 'immersive',
-            'opacity-100': settings.readingMode !== 'immersive'
+            'opacity-0 hover:opacity-100': settings.readingMode === 'immersive' || isFullscreen,
+            'opacity-100': settings.readingMode !== 'immersive' && !isFullscreen,
+            'fixed bottom-0 left-0 right-0 z-40': isFullscreen,
+            'relative': !isFullscreen
           }
         )}>
           <ProgressBar 
@@ -768,6 +804,10 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
             }
           )}
           aria-label={currentBookmark ? 'Remove bookmark' : 'Add bookmark'}
+          style={{
+            bottom: isFullscreen ? '16px' : undefined,
+            right: isFullscreen ? '16px' : undefined
+          }}
         >
           {currentBookmark ? (
             <IoBookmark className={classNames({

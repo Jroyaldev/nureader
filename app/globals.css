@@ -158,6 +158,84 @@
     letter-spacing: -0.011em;
     line-height: 1.5;
   }
+  
+  /* Ensure background color in fullscreen */
+  .bg-background {
+    background-color: rgb(var(--background));
+  }
+  
+  /* Fix for fullscreen content visibility */
+  #reader-container:fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9999 !important;
+    background-color: rgb(var(--background)) !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  #reader-container:-webkit-full-screen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9999 !important;
+    background-color: rgb(var(--background)) !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  #reader-container:-moz-full-screen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9999 !important;
+    background-color: rgb(var(--background)) !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  #reader-container:-ms-fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9999 !important;
+    background-color: rgb(var(--background)) !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* Ensure content is visible in fullscreen */
+  :fullscreen .prose,
+  :-webkit-full-screen .prose,
+  :-moz-full-screen .prose,
+  :-ms-fullscreen .prose {
+    color: rgb(var(--foreground)) !important;
+  }
+  
+  /* Ensure flex children work properly in fullscreen */
+  #reader-container:fullscreen > *,
+  #reader-container:-webkit-full-screen > *,
+  #reader-container:-moz-full-screen > *,
+  #reader-container:-ms-fullscreen > * {
+    flex-shrink: 0;
+  }
+  
+  #reader-container:fullscreen .flex-1,
+  #reader-container:-webkit-full-screen .flex-1,
+  #reader-container:-moz-full-screen .flex-1,
+  #reader-container:-ms-fullscreen .flex-1 {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+  }
 
   /* === PREMIUM TYPOGRAPHY SYSTEM === */
   .font-reading {
@@ -382,6 +460,7 @@
     0% { transform: translateY(20px); opacity: 0; }
     100% { transform: translateY(0); opacity: 1; }
   }
+  
   
   /* === EPUB READER SPECIFIC === */
   .epub-container {
@@ -651,10 +730,14 @@
   
   .reading-layout {
     @apply grid grid-cols-1 lg:grid-cols-12 gap-8;
+    height: calc(100vh - 6rem - 4rem); /* Account for header and padding */
   }
   
   .reading-main {
     @apply lg:col-span-8;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
   
   .reading-sidebar {

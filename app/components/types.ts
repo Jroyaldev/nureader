@@ -38,7 +38,7 @@ export interface ReadingSettings {
   backgroundMusic: boolean;
   autoPageTurn: boolean;
   readingGoal: number;
-  pageAnimation?: 'flip' | 'slide' | 'fade';
+  pageAnimation?: 'flip' | 'slide' | 'fade' | 'none';
 }
 
 export interface ReadingProgress {

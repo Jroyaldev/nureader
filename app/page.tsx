@@ -185,71 +185,8 @@ export default function Home() {
             </div>
           ) : (
             /* Premium Reading Interface */
-            <div className="reading-layout animate-fade-in">
-              {/* Reader Area */}
-              <div className="reading-main">
-                <div className="card p-0 overflow-hidden">
-                  <EPUBReader file={file} onHighlight={handleHighlight} />
-                </div>
-              </div>
-
-              {/* AI Insights Sidebar */}
-              <div className="reading-sidebar">
-                <div className="sticky top-28 space-y-6">
-                  {/* AI Insights Panel */}
-                  <div className="card">
-                    <div className="flex items-center space-x-3 mb-6">
-                      <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                        <IoSparklesOutline className="w-5 h-5 text-primary" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-foreground">
-                        AI Insights
-                      </h3>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      {aiInsights.length > 0 ? (
-                        aiInsights.map((insight, index) => (
-                          <div key={index} className="p-4 bg-muted/50 rounded-xl animate-slide-up">
-                            <p className="text-sm text-foreground-secondary leading-relaxed">
-                              {insight}
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="p-6 bg-muted/30 rounded-xl text-center">
-                          <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-3">
-                            <IoSparklesOutline className="w-6 h-6 text-primary" />
-                          </div>
-                          <p className="text-sm text-foreground-secondary mb-2">
-                            Start Reading
-                          </p>
-                          <p className="text-xs text-foreground-muted">
-                            AI insights and analysis will appear here as you highlight text and progress through your book.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Reading Progress */}
-                  <div className="card">
-                    <h3 className="text-sm font-semibold text-foreground mb-4">Reading Progress</h3>
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-foreground-secondary">Today</span>
-                        <span className="text-foreground">0 minutes</span>
-                      </div>
-                      <div className="progress-bar">
-                        <div className="progress-fill w-0"></div>
-                      </div>
-                      <p className="text-xs text-foreground-muted">
-                        Set a reading goal in Settings to track your progress.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="fixed inset-0 top-20">
+              <EPUBReader file={file} onHighlight={handleHighlight} />
             </div>
           )}
         </div>

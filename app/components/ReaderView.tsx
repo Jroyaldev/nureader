@@ -1,14 +1,12 @@
 'use client';
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { IoChevronBack, IoChevronForward, IoAdd, IoRemove } from 'react-icons/io5';
 import classNames from 'classnames';
 import DOMPurify from 'dompurify';
 import { ReadingSettings, Highlight } from './types';
-import styles from './PageTurnAnimation.module.css';
 import HighlightColorPicker from './HighlightColorPicker';
-import { ContentSkeleton, NavigationSkeleton } from './skeletons';
-import { useMobileTouch, useMobileCapabilities, useTouchPerformance } from './useMobileTouch';
+import { ContentSkeleton } from './skeletons';
+import { useMobileTouch, useMobileCapabilities } from './useMobileTouch';
 import { 
   getTextSelection, 
   getSelectedText, 
@@ -23,12 +21,9 @@ interface ReaderViewProps {
   settings: ReadingSettings;
   onNextChapter: () => void;
   onPrevChapter: () => void;
-  onPageChange: (page: number) => void;
-  onTotalPagesChange: (totalPages: number) => void;
+  onProgressChange: (progress: number) => void;
   isFirstChapter: boolean;
   isLastChapter: boolean;
-  currentPage: number;
-  totalPages: number;
   chapterProgress: number;
   highlights?: Highlight[];
   onHighlight?: (text: string, color: Highlight['color'], startOffset: number, endOffset: number) => void;
@@ -42,91 +37,75 @@ const ReaderView = React.memo(({
   settings,
   onNextChapter,
   onPrevChapter,
-  onPageChange,
-  onTotalPagesChange,
+  onProgressChange,
   isFirstChapter,
   isLastChapter,
-  currentPage,
-  totalPages,
-  chapterProgress,
+  chapterProgress: _chapterProgress,
   highlights = [],
   onHighlight,
-  onHighlightClick,
+  onHighlightClick = () => {},
   isLoading = false,
   isTransitioning: isTransitioningProp = false
 }: ReaderViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [turnDirection, setTurnDirection] = useState<'forward' | 'backward'>('forward');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [colorPickerPosition, setColorPickerPosition] = useState<{ x: number; y: number } | null>(null);
   const [selectedText, setSelectedText] = useState('');
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [showZoomControls, setShowZoomControls] = useState(false);
-  const [touchFeedback, setTouchFeedback] = useState<{ x: number; y: number; show: boolean }>({ x: 0, y: 0, show: false });
   
   // Mobile touch capabilities
   const capabilities = useMobileCapabilities();
-  const { isOptimized } = useTouchPerformance();
-  
-  // Get animation type from settings or default based on device/preferences
-  const animationType = settings.pageAnimation || (capabilities.isSmallScreen ? 'slide' : 'flip');
 
-  const goToPage = useCallback((page: number, smooth = true) => {
-    if (!containerRef.current || isTransitioning || isTransitioningProp) return;
 
-    // Check if we need to change chapters
-    if (page < 1) {
-      if (!isFirstChapter) {
-        setIsTransitioning(true);
-        setTurnDirection('backward');
-        setTimeout(() => {
-          onPrevChapter();
-          setIsTransitioning(false);
-        }, 600);
-      }
-      return;
-    }
-    if (page > totalPages) {
-      if (!isLastChapter) {
-        setIsTransitioning(true);
-        setTurnDirection('forward');
-        setTimeout(() => {
+  // Page navigation with smooth scrolling
+  const navigatePage = useCallback((direction: 'next' | 'prev') => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const viewportHeight = container.clientHeight;
+    const currentScroll = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const maxScroll = scrollHeight - viewportHeight;
+    
+    if (direction === 'next') {
+      if (maxScroll <= 0 || currentScroll >= maxScroll - 10) {
+        if (!isLastChapter) {
           onNextChapter();
-          setIsTransitioning(false);
-        }, 600);
+        }
+      } else {
+        const targetScroll = Math.min(currentScroll + viewportHeight * 0.9, maxScroll);
+        container.scrollTo({ top: targetScroll, behavior: 'smooth' });
       }
+    } else {
+      if (currentScroll <= 10) {
+        if (!isFirstChapter) {
+          onPrevChapter();
+        }
+      } else {
+        const targetScroll = Math.max(currentScroll - viewportHeight * 0.9, 0);
+        container.scrollTo({ top: targetScroll, behavior: 'smooth' });
+      }
+    }
+  }, [isFirstChapter, isLastChapter, onNextChapter, onPrevChapter]);
+
+
+  // Track scroll position
+  const updateScrollPosition = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const maxScroll = scrollHeight - clientHeight;
+    
+    if (maxScroll <= 0) {
+      onProgressChange(100);
       return;
     }
-
-    // Determine animation direction
-    const direction = page > currentPage ? 'forward' : 'backward';
-    setTurnDirection(direction);
     
-    // Only animate if smooth is true and not using reduced motion
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    
-    if (smooth && !prefersReducedMotion) {
-      setIsTransitioning(true);
-      
-      // Wait for animation to complete
-      setTimeout(() => {
-        const pageHeight = containerRef.current!.clientHeight;
-        const scrollTop = (page - 1) * pageHeight;
-        containerRef.current!.scrollTop = scrollTop;
-        onPageChange(page);
-        setIsTransitioning(false);
-      }, animationType === 'fade' ? 300 : animationType === 'slide' ? 400 : 600);
-    } else {
-      // Instant page change for reduced motion or non-smooth navigation
-      const pageHeight = containerRef.current.clientHeight;
-      const scrollTop = (page - 1) * pageHeight;
-      containerRef.current.scrollTop = scrollTop;
-      onPageChange(page);
-    }
-  }, [isTransitioning, isTransitioningProp, isFirstChapter, isLastChapter, totalPages, currentPage, animationType, onPrevChapter, onNextChapter, onPageChange]);
+    const progress = (scrollTop / maxScroll) * 100;
+    onProgressChange(Math.min(100, Math.max(0, progress)));
+  }, [onProgressChange]);
 
   const handleHighlightColor = useCallback((color: Highlight['color']) => {
     if (selectedText && selectionRange && onHighlight) {
@@ -138,71 +117,11 @@ const ReaderView = React.memo(({
     }
   }, [selectedText, selectionRange, onHighlight]);
 
-  // Handle pinch-to-zoom for text scaling
-  const handlePinchZoom = useCallback((scale: number, isEnd: boolean) => {
-    if (!capabilities.supportsPinchZoom) return;
-    
-    const newZoom = Math.max(0.8, Math.min(2.5, scale));
-    setZoomLevel(newZoom);
-    
-    if (isEnd) {
-      // Update font size based on zoom level
-      const newFontSize = Math.round(settings.fontSize * newZoom);
-      if (newFontSize !== settings.fontSize && newFontSize >= 12 && newFontSize <= 32) {
-        // This would typically update settings, but we'll just show zoom controls instead
-        setShowZoomControls(true);
-        setTimeout(() => setShowZoomControls(false), 2000);
-      }
-      setZoomLevel(1); // Reset visual zoom after font size update
-    }
-  }, [capabilities.supportsPinchZoom, settings.fontSize]);
-
-  // Handle tap for showing/hiding UI elements
-  const handleTap = useCallback((x: number, y: number) => {
-    // Show touch feedback
-    setTouchFeedback({ x, y, show: true });
-    setTimeout(() => setTouchFeedback(prev => ({ ...prev, show: false })), 200);
-    
-    // In immersive mode, show controls briefly
-    if (settings.readingMode === 'immersive') {
-      const event = new CustomEvent('showImmersiveControls');
-      window.dispatchEvent(event);
-    }
-  }, [settings.readingMode]);
-
-  // Handle long press for text selection on mobile
-  const handleLongPress = useCallback((x: number, y: number) => {
-    if (!capabilities.isTouchDevice) return;
-    
-    // Enable text selection mode
-    if (contentRef.current) {
-      contentRef.current.style.userSelect = 'text';
-      contentRef.current.style.webkitUserSelect = 'text';
-      
-      // Create a synthetic text selection at the touch point
-      const element = document.elementFromPoint(x, y);
-      if (element && element.closest('[data-selectable]')) {
-        const range = document.createRange();
-        const selection = window.getSelection();
-        if (selection) {
-          try {
-            range.selectNodeContents(element);
-            selection.removeAllRanges();
-            selection.addRange(range);
-          } catch (err) {
-            console.warn('Text selection failed:', err);
-          }
-        }
-      }
-    }
-  }, [capabilities.isTouchDevice]);
-
-  // Enhanced keyboard navigation with highlight shortcuts
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      // Quick highlight shortcuts when text is selected
       const selection = window.getSelection();
       const hasSelection = selection ? selection.toString().trim().length > 0 : false;
       
@@ -228,29 +147,21 @@ const ReaderView = React.memo(({
         case 'ArrowUp':
         case 'PageUp':
           e.preventDefault();
-          goToPage(currentPage - 1);
+          navigatePage('prev');
           break;
         case 'ArrowRight':
         case 'ArrowDown':
         case 'PageDown':
         case ' ':
           e.preventDefault();
-          goToPage(currentPage + 1);
-          break;
-        case 'Home':
-          e.preventDefault();
-          goToPage(1);
-          break;
-        case 'End':
-          e.preventDefault();
-          goToPage(totalPages);
+          navigatePage('next');
           break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPage, totalPages, goToPage, handleHighlightColor]);
+  }, [handleHighlightColor, navigatePage]);
 
   // Handle text selection for highlighting
   const handleTextSelection = useCallback(() => {
@@ -271,112 +182,71 @@ const ReaderView = React.memo(({
       setColorPickerPosition(coords);
       setShowColorPicker(true);
       
-      // Calculate offsets
       const startOffset = calculateTextOffset(contentRef.current, selection.startContainer, selection.startOffset);
       const endOffset = calculateTextOffset(contentRef.current, selection.endContainer, selection.endOffset);
       setSelectionRange({ start: startOffset, end: endOffset });
     }
   }, [onHighlight]);
 
-  // Set content and handle page calculations
-  useEffect(() => {
-    if (!contentRef.current || !containerRef.current) return;
-
-    const cleanContent = DOMPurify.sanitize(content, {
+  // Clean and sanitize content
+  const cleanContent = React.useMemo(() => {
+    if (!content) return '';
+    return DOMPurify.sanitize(content, {
       ADD_TAGS: ['image', 'svg'],
       ADD_ATTR: ['srcset', 'alt']
     });
+  }, [content]);
+
+  // Handle text selection
+  useEffect(() => {
+    if (!contentRef.current || !onHighlight) return;
     
-    contentRef.current.innerHTML = cleanContent;
-
-    // Calculate pages based on content height
-    const calculatePages = () => {
-      if (!contentRef.current || !containerRef.current) return;
-      
-      const containerHeight = containerRef.current.clientHeight;
-      const contentHeight = contentRef.current.scrollHeight;
-      
-      if (contentHeight > 0 && containerHeight > 0) {
-        const pages = Math.max(1, Math.ceil(contentHeight / containerHeight));
-        // Update total pages for this chapter
-        if (pages !== totalPages) {
-          onTotalPagesChange(pages);
-          onPageChange(1); // Reset to first page when content changes
-        }
-      }
-    };
-
-    // Apply highlights after content is set
-    if (highlights.length > 0) {
-      renderHighlights(contentRef.current, highlights);
-    }
-
-    // Add selection listener
     const handleSelection = () => {
       handleTextSelection();
     };
     
     document.addEventListener('selectionchange', handleSelection);
+    return () => document.removeEventListener('selectionchange', handleSelection);
+  }, [handleTextSelection, onHighlight]);
 
-    // Wait for images to load before calculating pages
-    const images = contentRef.current.querySelectorAll('img');
-    let loadedImages = 0;
+  // Apply content and highlights
+  useEffect(() => {
+    if (!contentRef.current || !cleanContent) return;
     
-    if (images.length === 0) {
-      calculatePages();
-    } else {
-      images.forEach((img) => {
-        if (img.complete) {
-          loadedImages++;
-          if (loadedImages === images.length) {
-            calculatePages();
-          }
-        } else {
-          img.onload = () => {
-            loadedImages++;
-            if (loadedImages === images.length) {
-              calculatePages();
-            }
-          };
-          img.onerror = () => {
-            loadedImages++;
-            if (loadedImages === images.length) {
-              calculatePages();
-            }
-          };
-        }
-      });
+    contentRef.current.innerHTML = cleanContent;
+    
+    if (highlights.length > 0) {
+      renderHighlights(contentRef.current, highlights);
     }
+    
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+      updateScrollPosition();
+    }
+  }, [cleanContent, highlights, updateScrollPosition]);
 
-    return () => {
-      document.removeEventListener('selectionchange', handleSelection);
+  // Track scroll progress
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const handleScroll = () => {
+      updateScrollPosition();
     };
-  }, [content, totalPages, highlights, onPageChange, onTotalPagesChange, handleTextSelection]);
+    
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    updateScrollPosition();
+    
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [updateScrollPosition]);
 
-  // Enhanced mobile touch handling
+  // Mobile touch handling
   const { touchHandlers } = useMobileTouch({
-    onSwipeLeft: () => goToPage(currentPage + 1),
-    onSwipeRight: () => goToPage(currentPage - 1),
-    onPinchZoom: handlePinchZoom,
-    onTap: handleTap,
-    onLongPress: handleLongPress,
-    swipeThreshold: 60, // Slightly higher threshold for more deliberate swipes
-    preventScrollOnSwipe: true
+    onSwipeLeft: () => navigatePage('next'),
+    onSwipeRight: () => navigatePage('prev'),
+    swipeThreshold: 50,
+    preventScrollOnSwipe: false
   });
-
-  // Zoom controls for mobile
-  const handleZoomIn = useCallback(() => {
-    const newSize = Math.min(32, settings.fontSize + 2);
-    // This would update settings - placeholder for the actual implementation
-    console.log('Zoom in to:', newSize);
-  }, [settings.fontSize]);
-
-  const handleZoomOut = useCallback(() => {
-    const newSize = Math.max(12, settings.fontSize - 2);
-    // This would update settings - placeholder for the actual implementation  
-    console.log('Zoom out to:', newSize);
-  }, [settings.fontSize]);
-
 
   const themeClasses = {
     light: 'bg-white text-gray-900',
@@ -390,78 +260,60 @@ const ReaderView = React.memo(({
     immersive: 'max-w-3xl mx-auto'
   };
 
-  // Show skeleton while loading or transitioning
-  if (isLoading || ((isTransitioning || isTransitioningProp) && !content)) {
-    return (
-      <div className="flex flex-col h-full">
-        <NavigationSkeleton />
-        <ContentSkeleton className="flex-1" />
-      </div>
-    );
+  if (isLoading || (isTransitioningProp && !content)) {
+    return <ContentSkeleton className="h-full" />;
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div
-        ref={containerRef}
-        className={classNames(
-          'flex-1 overflow-hidden relative',
-          themeClasses[settings.theme],
-          modeClasses[settings.readingMode],
-          styles.pageContainer,
-          {
-            [styles.slideAnimation]: animationType === 'slide',
-            [styles.fadeAnimation]: animationType === 'fade',
-            [styles.flipAnimation]: animationType === 'flip',
-            [styles.pageTurning]: isTransitioning || isTransitioningProp,
-            'skeleton-shimmer': (isTransitioning || isTransitioningProp) && content // Show shimmer overlay during transitions
-          }
-        )}
-        {...touchHandlers}
-        style={{
-          fontSize: `${settings.fontSize}px`,
-          fontFamily: settings.fontFamily,
-          lineHeight: settings.lineHeight,
-          letterSpacing: `${settings.letterSpacing}px`,
-          transform: `scale(${zoomLevel})`,
-          transformOrigin: 'center center',
-          transition: zoomLevel !== 1 ? 'transform 0.1s ease-out' : 'transform 0.3s ease-out'
-        }}
-      >
-        {/* Current Page */}
+    <div
+      ref={containerRef}
+      className={classNames(
+        'h-full overflow-y-auto overflow-x-hidden scroll-smooth',
+        themeClasses[settings.theme]
+      )}
+      {...touchHandlers}
+      style={{
+        fontSize: `${settings.fontSize}px`,
+        fontFamily: settings.fontFamily,
+        lineHeight: settings.lineHeight,
+        letterSpacing: `${settings.letterSpacing}px`
+      }}
+    >
+        {/* Content */}
         <div
+          ref={contentRef}
           className={classNames(
-            styles.page,
-            {
-              [styles.pageActive]: !(isTransitioning || isTransitioningProp),
-              [styles.pageTurningForward]: (isTransitioning || isTransitioningProp) && turnDirection === 'forward',
-              [styles.pageTurningBackward]: (isTransitioning || isTransitioningProp) && turnDirection === 'backward'
-            }
+            'prose prose-lg max-w-none',
+            modeClasses[settings.readingMode],
+            // Enhanced typography classes
+            'prose-headings:font-serif prose-headings:font-medium',
+            'prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl',
+            'prose-headings:mb-4 prose-headings:mt-8',
+            'prose-headings:text-gray-900 dark:prose-headings:text-gray-100',
+            // Improved paragraph styling
+            'prose-p:text-gray-800 dark:prose-p:text-gray-200',
+            'prose-p:mb-4 prose-p:leading-relaxed',
+            // Better contrast and readability
+            'prose-strong:text-gray-900 dark:prose-strong:text-gray-100 prose-strong:font-semibold',
+            'prose-em:text-gray-800 dark:prose-em:text-gray-200',
+            // Refined blockquote styling
+            'prose-blockquote:border-l-4 prose-blockquote:border-gray-300 dark:prose-blockquote:border-gray-600',
+            'prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:my-6',
+            // Image handling
+            'prose-img:rounded-lg prose-img:shadow-lg prose-img:my-8',
+            // Link styling
+            'prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline',
+            // Selection color
+            'selection:bg-blue-200 dark:selection:bg-blue-800'
           )}
-        >
-          <div
-            ref={contentRef}
-            className={classNames(
-              'prose max-w-none h-full overflow-hidden',
-              {
-                'text-selection-active': capabilities.isTouchDevice
-              }
-            )}
-            data-selectable
-            style={{
-              padding: `${capabilities.isSmallScreen ? Math.max(16, settings.marginSize / 2) : settings.marginSize}px`,
-              maxWidth: `${settings.columnWidth}ch`,
-              margin: settings.pageLayout === 'single' ? '0 auto' : undefined,
-              columns: settings.pageLayout === 'double' && !capabilities.isSmallScreen ? 2 : undefined,
-              columnGap: settings.pageLayout === 'double' && !capabilities.isSmallScreen ? `${settings.marginSize * 2}px` : undefined,
-              userSelect: capabilities.isTouchDevice ? 'none' : 'text',
-              WebkitUserSelect: capabilities.isTouchDevice ? 'none' : 'text'
-            }}
-          />
-        </div>
-        
-        {/* Page shadow effect */}
-        <div className={styles.pageShadow} />
+          style={{
+            padding: `${settings.marginSize * 1.5}px ${capabilities.isSmallScreen ? settings.marginSize : settings.marginSize * 2}px`,
+            paddingBottom: `${settings.marginSize * 3}px`,
+            maxWidth: settings.readingMode === 'normal' ? '100%' : settings.readingMode === 'focus' ? '75ch' : '65ch',
+            margin: '0 auto',
+            minHeight: '100vh' // Ensure minimum height for proper scrolling
+          }}
+        />
         
         {/* Highlight Color Picker */}
         {showColorPicker && colorPickerPosition && (
@@ -474,106 +326,6 @@ const ReaderView = React.memo(({
             }}
           />
         )}
-        
-        {/* Page curl effect (desktop only) */}
-        {animationType === 'flip' && !capabilities.isTouchDevice && (
-          <div className={styles.pageCurl} />
-        )}
-        
-        {/* Touch feedback indicator */}
-        {touchFeedback.show && capabilities.isTouchDevice && (
-          <div 
-            className="fixed w-12 h-12 pointer-events-none z-50 transition-all duration-200"
-            style={{
-              left: touchFeedback.x - 24,
-              top: touchFeedback.y - 24,
-              background: 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%)',
-              borderRadius: '50%',
-              transform: 'scale(1)',
-              animation: 'ping 0.2s ease-out'
-            }}
-          />
-        )}
-        
-        {/* Mobile zoom controls */}
-        {capabilities.isTouchDevice && showZoomControls && (
-          <div className="fixed top-1/2 right-4 transform -translate-y-1/2 flex flex-col gap-2 z-40 animate-fade-in">
-            <button
-              onClick={handleZoomIn}
-              className="control-button bg-black/20 backdrop-blur-sm p-3 rounded-full"
-              aria-label="Zoom in"
-            >
-              <IoAdd className="w-5 h-5 text-white" />
-            </button>
-            <button
-              onClick={handleZoomOut}
-              className="control-button bg-black/20 backdrop-blur-sm p-3 rounded-full"
-              aria-label="Zoom out"
-            >
-              <IoRemove className="w-5 h-5 text-white" />
-            </button>
-          </div>
-        )}
-      </div>
-      
-      {/* Navigation Controls */}
-      <div className={classNames(
-        'flex items-center justify-between backdrop-blur-md border-t transition-all duration-300',
-        {
-          'px-6 py-4': !capabilities.isSmallScreen,
-          'px-4 py-3': capabilities.isSmallScreen,
-          'bg-white/90 dark:bg-gray-900/90 border-gray-200/50 dark:border-gray-700/50': settings.readingMode !== 'immersive',
-          'bg-transparent border-transparent opacity-0 hover:opacity-100 hover:bg-white/5 dark:hover:bg-gray-900/5': settings.readingMode === 'immersive'
-        }
-      )}>
-        <button
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage === 1 && isFirstChapter}
-            className={classNames(
-              'flex items-center gap-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-all duration-200 group',
-              {
-                'px-4 py-2': !capabilities.isSmallScreen,
-                'px-3 py-2 min-h-[44px]': capabilities.isSmallScreen // Ensure minimum touch target size
-              }
-            )}
-            aria-label="Previous page"
-          >
-            <IoChevronBack className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
-            {!capabilities.isSmallScreen && (
-              <span className="text-sm font-medium">Previous</span>
-            )}
-          </button>
-          
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              Page {currentPage} of {totalPages}
-            </span>
-            <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-1">
-              <div
-                className="bg-blue-600 h-1 rounded-full transition-all duration-300"
-                style={{ width: `${chapterProgress}%` }}
-              />
-            </div>
-          </div>
-          
-          <button
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage === totalPages && isLastChapter}
-            className={classNames(
-              'flex items-center gap-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-all duration-200 group',
-              {
-                'px-4 py-2': !capabilities.isSmallScreen,
-                'px-3 py-2 min-h-[44px]': capabilities.isSmallScreen // Ensure minimum touch target size
-              }
-            )}
-            aria-label="Next page"
-          >
-            {!capabilities.isSmallScreen && (
-              <span className="text-sm font-medium">Next</span>
-            )}
-            <IoChevronForward className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-          </button>
-        </div>
     </div>
   );
 });

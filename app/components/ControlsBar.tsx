@@ -108,7 +108,7 @@ const ControlsBar = React.memo(({
 
   return (
     <div className={classNames(
-      'flex items-center justify-between backdrop-blur-md border-b transition-all duration-300',
+      'flex items-center justify-between backdrop-blur-md border-b transition-all duration-300 z-10',
       {
         'px-6 py-4': !capabilities.isSmallScreen,
         'px-4 py-3': capabilities.isSmallScreen,
@@ -116,8 +116,8 @@ const ControlsBar = React.memo(({
         'bg-transparent border-transparent': settings.readingMode === 'immersive',
         'opacity-0 hover:opacity-100 hover:bg-white/5 dark:hover:bg-gray-900/5': settings.readingMode === 'immersive' && !capabilities.isTouchDevice,
         'opacity-100': settings.readingMode !== 'immersive' || capabilities.isTouchDevice,
-        'transform -translate-y-full': capabilities.isTouchDevice && settings.readingMode === 'immersive' && shouldAutoHide,
-        'transform translate-y-0': !capabilities.isTouchDevice || settings.readingMode !== 'immersive' || !shouldAutoHide
+        'transform -translate-y-full': capabilities.isTouchDevice && settings.readingMode === 'immersive' && shouldAutoHide && !isFullscreen,
+        'transform translate-y-0': !capabilities.isTouchDevice || settings.readingMode !== 'immersive' || !shouldAutoHide || isFullscreen
       }
     )}>
       {/* Left Controls: Navigation */}
