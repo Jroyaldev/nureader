@@ -67,11 +67,21 @@ const ControlsBar = React.memo(({
     }
   };
 
+  const getReadingModeLabel = () => {
+    switch (settings.readingMode) {
+      case 'normal': return 'Normal Mode';
+      case 'focus': return 'Focus Mode';
+      case 'immersive': return 'Immersive Mode';
+      default: return 'Reading Mode';
+    }
+  };
+
   return (
     <div className={classNames(
-      'flex items-center justify-between px-6 py-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-200/50 dark:border-gray-700/50 transition-all duration-300',
+      'flex items-center justify-between px-6 py-4 backdrop-blur-md border-b transition-all duration-300',
       {
-        'bg-transparent border-transparent': settings.readingMode === 'immersive'
+        'bg-white/90 dark:bg-gray-900/90 border-gray-200/50 dark:border-gray-700/50': settings.readingMode !== 'immersive',
+        'bg-transparent border-transparent opacity-0 hover:opacity-100 hover:bg-white/5 dark:hover:bg-gray-900/5': settings.readingMode === 'immersive'
       }
     )}>
       {/* Left Controls: Navigation */}
@@ -125,10 +135,19 @@ const ControlsBar = React.memo(({
         </button>
         <button
           onClick={onToggleReadingMode}
-          className="control-button group"
-          aria-label="Toggle Reading Mode"
+          className={classNames(
+            'control-button group relative',
+            {
+              'bg-primary/10 text-primary': settings.readingMode !== 'normal'
+            }
+          )}
+          aria-label={getReadingModeLabel()}
+          title={getReadingModeLabel()}
         >
           <IoEye className="w-5 h-5 transition-transform group-hover:scale-110" />
+          {settings.readingMode !== 'normal' && (
+            <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></div>
+          )}
         </button>
         <button
           onClick={onToggleFullscreen}

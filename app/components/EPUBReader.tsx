@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { IoBookmarkOutline, IoBookmark } from 'react-icons/io5';
+import { IoBookmarkOutline, IoBookmark, IoSettings, IoEye } from 'react-icons/io5';
 import debounce from 'lodash.debounce';
 import classNames from 'classnames';
 
@@ -16,6 +16,8 @@ import SettingsModal from './SettingsModal';
 import ReaderView from './ReaderView';
 import LoadingState from './LoadingState';
 import { useEPUBLoader } from './useEPUBLoader';
+import { useToast } from './useToast';
+import { ToastContainer } from './Toast';
 import {
   EPUBChapter,
   EPUBResource,
@@ -46,6 +48,9 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
   // Use the optimized EPUB loader hook
   const { loadEPUB, loadingState } = useEPUBLoader();
   const { isLoading, progress: loadingProgress, stage: loadingStage, error } = loadingState;
+  
+  // Toast notifications
+  const { toasts, removeToast, success, error: showError, info } = useToast();
   
   // UI state
   const [showTOC, setShowTOC] = useState(false);
@@ -170,13 +175,15 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
           ...prev,
           totalPages: 1 // Will be updated per chapter
         }));
+        success('Book loaded successfully', `Loaded ${loadedChapters.length} chapters`);
       } catch (err) {
         console.error('Failed to load EPUB:', err);
+        showError('Failed to load book', 'Please check that the file is a valid EPUB format');
       }
     };
 
     loadEPUBFile();
-  }, [file, loadEPUB]);
+  }, [file, loadEPUB, success, showError]);
 
 
   // Enhanced search with better performance
@@ -306,6 +313,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
 
     if (existingBookmark) {
       setBookmarks(prev => prev.filter(b => b.id !== existingBookmark.id));
+      success('Bookmark removed', `Removed bookmark from ${chapters[progress.currentChapter]?.title || 'chapter'}`);
     } else {
       const newBookmark: BookmarkWithNote = {
         id: bookmarkId,
@@ -316,20 +324,24 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         createdAt: Date.now()
       };
       setBookmarks(prev => [...prev, newBookmark]);
+      success('Bookmark added', `Bookmarked ${chapters[progress.currentChapter]?.title || 'chapter'}`);
     }
-  }, [progress, bookmarks]);
+  }, [progress, bookmarks, success, chapters]);
 
   const updateBookmarkNote = useCallback((bookmarkId: string, note: string) => {
     setBookmarks(prev => prev.map(b => b.id === bookmarkId ? { ...b, note } : b));
-  }, []);
+    info('Note updated', 'Bookmark note has been saved');
+  }, [info]);
 
   const updateBookmarkCategory = useCallback((bookmarkId: string, category: string) => {
     setBookmarks(prev => prev.map(b => b.id === bookmarkId ? { ...b, category } : b));
-  }, []);
+    info('Category updated', `Bookmark moved to ${category || 'default'} category`);
+  }, [info]);
 
   const deleteBookmark = useCallback((bookmarkId: string) => {
     setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
-  }, []);
+    success('Bookmark deleted', 'Bookmark has been permanently removed');
+  }, [success]);
 
   const handleBookmarkSelect = useCallback((chapterIndex: number, position: number) => {
     setProgress(prev => ({
@@ -479,22 +491,40 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       }
     )}>
       {/* Controls */}
-      {settings.readingMode !== 'immersive' && (
-        <ControlsBar
-          onToggleTOC={() => setShowTOC(true)}
-          onToggleBookmarks={() => setShowBookmarks(true)}
-          onToggleSearch={() => setShowSearch(true)}
-          onToggleSettings={() => setShowSettings(true)}
-          onToggleFullscreen={toggleFullscreen}
-          onToggleReadingMode={toggleReadingMode}
-          settings={settings}
-          onUpdateSettings={updateSettings}
-          isLoading={isLoading}
-          currentChapter={progress.currentChapter}
-          chapters={chapters}
-          isFullscreen={isFullscreen}
-          progress={progress}
-        />
+      <ControlsBar
+        onToggleTOC={() => setShowTOC(true)}
+        onToggleBookmarks={() => setShowBookmarks(true)}
+        onToggleSearch={() => setShowSearch(true)}
+        onToggleSettings={() => setShowSettings(true)}
+        onToggleFullscreen={toggleFullscreen}
+        onToggleReadingMode={toggleReadingMode}
+        settings={settings}
+        onUpdateSettings={updateSettings}
+        isLoading={isLoading}
+        currentChapter={progress.currentChapter}
+        chapters={chapters}
+        isFullscreen={isFullscreen}
+        progress={progress}
+      />
+      
+      {/* Immersive Mode Floating Controls */}
+      {settings.readingMode === 'immersive' && (
+        <div className="fixed top-4 right-4 z-40 flex gap-2 opacity-20 hover:opacity-100 transition-opacity duration-300">
+          <button
+            onClick={() => setShowSettings(true)}
+            className="control-button group bg-black/20 backdrop-blur-sm"
+            aria-label="Settings"
+          >
+            <IoSettings className="w-4 h-4 text-white" />
+          </button>
+          <button
+            onClick={toggleReadingMode}
+            className="control-button group bg-black/20 backdrop-blur-sm"
+            aria-label="Exit Immersive Mode"
+          >
+            <IoEye className="w-4 h-4 text-white" />
+          </button>
+        </div>
       )}
 
       {/* Modals */}
@@ -576,12 +606,20 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       </ErrorBoundary>
 
       {/* Progress Bar */}
-      {!isLoading && chapters.length > 0 && settings.readingMode !== 'immersive' && (
-        <ProgressBar 
-          progress={progress} 
-          settings={settings}
-          onToggleStats={() => setShowStats(true)}
-        />
+      {!isLoading && chapters.length > 0 && (
+        <div className={classNames(
+          'transition-all duration-300',
+          {
+            'opacity-0 hover:opacity-100': settings.readingMode === 'immersive',
+            'opacity-100': settings.readingMode !== 'immersive'
+          }
+        )}>
+          <ProgressBar 
+            progress={progress} 
+            settings={settings}
+            onToggleStats={() => setShowStats(true)}
+          />
+        </div>
       )}
 
       {/* Floating Bookmark Button */}
@@ -589,11 +627,12 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         <button
           onClick={toggleBookmark}
           className={classNames(
-            'fixed bottom-8 right-8 p-4 rounded-full shadow-xl transition-all duration-300 z-40',
+            'fixed bottom-8 right-8 p-4 rounded-full shadow-xl transition-all duration-300 z-40 backdrop-blur-sm',
             {
-              'bg-blue-600 text-white hover:bg-blue-700': !currentBookmark,
-              'bg-yellow-500 text-white hover:bg-yellow-600': currentBookmark,
-              'bottom-4 right-4 p-3': isFullscreen
+              'bg-blue-600/90 text-white hover:bg-blue-700/90 hover:scale-110': !currentBookmark,
+              'bg-yellow-500/90 text-white hover:bg-yellow-600/90 hover:scale-110': currentBookmark,
+              'bottom-4 right-4 p-3': isFullscreen,
+              'opacity-30 hover:opacity-100': settings.readingMode === 'immersive'
             }
           )}
           aria-label={currentBookmark ? 'Remove bookmark' : 'Add bookmark'}
@@ -605,6 +644,9 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
           )}
         </button>
       )}
+      
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 };

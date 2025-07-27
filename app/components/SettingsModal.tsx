@@ -52,6 +52,24 @@ const SettingsModal = React.memo(({
               <option value="Arial">Arial</option>
               <option value="Helvetica">Helvetica</option>
             </select>
+            
+            {/* Font Preview */}
+            <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <p 
+                className="text-sm leading-relaxed"
+                style={{
+                  fontFamily: settings.fontFamily === 'serif' ? 'Charter, serif' : 
+                             settings.fontFamily === 'sans-serif' ? 'Inter, sans-serif' :
+                             settings.fontFamily === 'monospace' ? 'JetBrains Mono, monospace' :
+                             settings.fontFamily,
+                  fontSize: `${settings.fontSize}px`,
+                  lineHeight: settings.lineHeight,
+                  letterSpacing: `${settings.letterSpacing}px`
+                }}
+              >
+                The quick brown fox jumps over the lazy dog. This preview shows your current typography settings.
+              </p>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

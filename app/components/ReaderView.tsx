@@ -215,9 +215,14 @@ const ReaderView = React.memo(({
       </div>
       
       {/* Navigation Controls */}
-      {settings.readingMode !== 'immersive' && (
-        <div className="flex items-center justify-between px-6 py-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-t border-gray-200/50 dark:border-gray-700/50">
-          <button
+      <div className={classNames(
+        'flex items-center justify-between px-6 py-4 backdrop-blur-md border-t transition-all duration-300',
+        {
+          'bg-white/90 dark:bg-gray-900/90 border-gray-200/50 dark:border-gray-700/50': settings.readingMode !== 'immersive',
+          'bg-transparent border-transparent opacity-0 hover:opacity-100 hover:bg-white/5 dark:hover:bg-gray-900/5': settings.readingMode === 'immersive'
+        }
+      )}>
+        <button
             onClick={() => goToPage(currentPage - 1)}
             disabled={currentPage === 1 && isFirstChapter}
             className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-all duration-200 group"
@@ -249,7 +254,6 @@ const ReaderView = React.memo(({
             <IoChevronForward className="w-4 h-4 transition-transform group-hover:translate-x-1" />
           </button>
         </div>
-      )}
     </div>
   );
 });
