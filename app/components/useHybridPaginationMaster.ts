@@ -85,17 +85,20 @@ export const useHybridPaginationMaster = (
   // Initialize main pagination state management
   const paginationState = useHybridPaginationState(
     chapters,
-    settings,
-    bookmarks,
-    highlights,
-    containerDimensions,
-    onProgressChange
+    settings
   );
 
   // Enhanced navigation methods with error handling
   const safeNavigateToGlobalPage = useCallback(async (globalPageNumber: number): Promise<void> => {
     try {
-      await paginationState.navigateToGlobalPage(globalPageNumber);
+      const chapterPosition = paginationState.getChapterPosition(globalPageNumber);
+      if (chapterPosition) {
+        paginationState.updatePosition({
+          chapterIndex: chapterPosition.chapterIndex,
+          chapterPageNumber: chapterPosition.pageNumber,
+          globalPageNumber: globalPageNumber
+        });
+      }
     } catch (error) {
       const handled = fallbackSystems.handleNavigationError(error as Error, {
         component: 'HybridPagination',
@@ -108,7 +111,11 @@ export const useHybridPaginationMaster = (
         console.error('Failed to navigate to global page:', error);
         // Attempt basic navigation to the closest chapter
         const targetChapter = Math.min(Math.floor(globalPageNumber / 10), chapters.length - 1);
-        await paginationState.navigateToChapterPage(targetChapter, 0);
+        paginationState.updatePosition({
+          chapterIndex: targetChapter,
+          chapterPageNumber: 0,
+          globalPageNumber: paginationState.getGlobalPosition(targetChapter, 0)
+        });
       }
     }
   }, [paginationState, fallbackSystems, chapters.length]);
@@ -118,7 +125,12 @@ export const useHybridPaginationMaster = (
     pageNumber: number
   ): Promise<void> => {
     try {
-      await paginationState.navigateToChapterPage(chapterIndex, pageNumber);
+      const globalPageNumber = paginationState.getGlobalPosition(chapterIndex, pageNumber);
+      paginationState.updatePosition({
+        chapterIndex,
+        chapterPageNumber: pageNumber,
+        globalPageNumber
+      });
     } catch (error) {
       const handled = fallbackSystems.handleNavigationError(error as Error, {
         component: 'HybridPagination',
@@ -142,7 +154,10 @@ export const useHybridPaginationMaster = (
     offset: number
   ): Promise<void> => {
     try {
-      await paginationState.navigateToPosition(chapterIndex, offset);
+      paginationState.updatePosition({
+        chapterIndex,
+        offsetInChapter: offset
+      });
     } catch (error) {
       const handled = fallbackSystems.handleNavigationError(error as Error, {
         component: 'HybridPagination',
@@ -161,7 +176,16 @@ export const useHybridPaginationMaster = (
 
   const safeNavigateNext = useCallback(async (): Promise<void> => {
     try {
-      await paginationState.navigateNext();
+      const currentPosition = paginationState.currentPosition;
+      const nextGlobalPage = currentPosition.globalPageNumber + 1;
+      const nextPosition = paginationState.getChapterPosition(nextGlobalPage);
+      if (nextPosition) {
+        paginationState.updatePosition({
+          chapterIndex: nextPosition.chapterIndex,
+          chapterPageNumber: nextPosition.pageNumber,
+          globalPageNumber: nextGlobalPage
+        });
+      }
     } catch (error) {
       fallbackSystems.handleNavigationError(error as Error, {
         component: 'HybridPagination',
@@ -171,8 +195,8 @@ export const useHybridPaginationMaster = (
       });
       
       // Simple fallback: move to next chapter
-      const nextChapter = Math.min(paginationState.progress.currentChapter + 1, chapters.length - 1);
-      if (nextChapter > paginationState.progress.currentChapter) {
+      const nextChapter = Math.min(paginationState.currentPosition.chapterIndex + 1, chapters.length - 1);
+      if (nextChapter > paginationState.currentPosition.chapterIndex) {
         await safeNavigateToChapterPage(nextChapter, 0);
       }
     }
@@ -180,7 +204,16 @@ export const useHybridPaginationMaster = (
 
   const safeNavigatePrevious = useCallback(async (): Promise<void> => {
     try {
-      await paginationState.navigatePrevious();
+      const currentPosition = paginationState.currentPosition;
+      const prevGlobalPage = Math.max(0, currentPosition.globalPageNumber - 1);
+      const prevPosition = paginationState.getChapterPosition(prevGlobalPage);
+      if (prevPosition) {
+        paginationState.updatePosition({
+          chapterIndex: prevPosition.chapterIndex,
+          chapterPageNumber: prevPosition.pageNumber,
+          globalPageNumber: prevGlobalPage
+        });
+      }
     } catch (error) {
       fallbackSystems.handleNavigationError(error as Error, {
         component: 'HybridPagination',
@@ -190,8 +223,8 @@ export const useHybridPaginationMaster = (
       });
       
       // Simple fallback: move to previous chapter
-      const prevChapter = Math.max(paginationState.progress.currentChapter - 1, 0);
-      if (prevChapter < paginationState.progress.currentChapter) {
+      const prevChapter = Math.max(paginationState.currentPosition.chapterIndex - 1, 0);
+      if (prevChapter < paginationState.currentPosition.chapterIndex) {
         await safeNavigateToChapterPage(prevChapter, 0);
       }
     }
@@ -199,13 +232,13 @@ export const useHybridPaginationMaster = (
 
   // Get current page information with fallback
   const currentPageMap = useMemo(() => {
-    const pageMap = paginationState.getPageBreakMap(paginationState.progress.currentChapter);
+    const pageMap = paginationState.getCachedPageBreakMap(paginationState.currentPosition.chapterIndex);
     
     if (!pageMap && !fallbackSystems.fallbackState.isUsingFallback) {
       // Create fallback page map if needed
-      const chapter = chapters[paginationState.progress.currentChapter];
+      const chapter = chapters[paginationState.currentPosition.chapterIndex];
       if (chapter) {
-        return fallbackSystems.createFallbackPageMap(chapter, paginationState.progress.currentChapter);
+        return fallbackSystems.createFallbackPageMap(chapter, paginationState.currentPosition.chapterIndex);
       }
     }
     
@@ -219,16 +252,17 @@ export const useHybridPaginationMaster = (
   const currentPageInfo = useMemo(() => {
     if (!currentPageMap) return null;
     
-    const pageIndex = paginationState.progress.chapterPagePosition;
+    const pageIndex = paginationState.currentPosition.chapterPageNumber;
     return currentPageMap.pages[pageIndex] || currentPageMap.pages[0] || null;
-  }, [currentPageMap, paginationState.progress.chapterPagePosition]);
+  }, [currentPageMap, paginationState.currentPosition.chapterPageNumber]);
 
   // Navigation state
-  const pageInfo = paginationState.getCurrentPageInfo();
-  const canNavigateNext = pageInfo.canGoNext;
-  const canNavigatePrevious = pageInfo.canGoPrevious;
-  const isFirstPage = pageInfo.isFirstPage;
-  const isLastPage = pageInfo.isLastPage;
+  const totalPages = paginationState.calculateTotalPages(chapters);
+  const currentGlobalPage = paginationState.currentPosition.globalPageNumber;
+  const canNavigateNext = currentGlobalPage < totalPages - 1;
+  const canNavigatePrevious = currentGlobalPage > 0;
+  const isFirstPage = currentGlobalPage === 0;
+  const isLastPage = currentGlobalPage === totalPages - 1;
 
   // System health status
   const systemHealth = useMemo((): 'healthy' | 'degraded' | 'fallback' => {
@@ -264,7 +298,8 @@ export const useHybridPaginationMaster = (
   // Enhanced recalculation with error handling
   const recalculateAllPages = useCallback(async (): Promise<void> => {
     try {
-      await paginationState.recalculateAllPages();
+      // Clear all cached page maps to force recalculation
+      paginationState.invalidateCache();
     } catch (error) {
       console.error('Page recalculation failed:', error);
       fallbackSystems.reportError(error as Error, {
@@ -279,7 +314,8 @@ export const useHybridPaginationMaster = (
       if (recovered) {
         // Retry calculation after recovery
         try {
-          await paginationState.recalculateAllPages();
+          // Clear all cached page maps to force recalculation
+      paginationState.invalidateCache();
         } catch (retryError) {
           console.error('Recalculation failed even after recovery:', retryError);
         }
@@ -312,9 +348,43 @@ export const useHybridPaginationMaster = (
   }, [clearCache, fallbackSystems, recalculateAllPages]);
 
   return {
-    // Core state
-    progress: paginationState.progress,
-    navigationContext: paginationState.navigationContext,
+    // Core state  
+    progress: {
+      currentChapter: paginationState.currentPosition.chapterIndex,
+      currentPage: paginationState.currentPosition.chapterPageNumber + 1,
+      totalPages: totalPages,
+      globalPagePosition: paginationState.currentPosition.globalPageNumber,
+      chapterPagePosition: paginationState.currentPosition.chapterPageNumber,
+      chapterTotalPages: currentPageMap?.pages.length || 1,
+      totalGlobalPages: totalPages,
+      overallProgress: (paginationState.currentPosition.globalPageNumber / Math.max(totalPages - 1, 1)) * 100,
+      timeSpent: 0,
+      wordsRead: 0,
+      sessionsToday: 1,
+      streak: 1
+    },
+    navigationContext: {
+      bookTitle: 'Current Book',
+      totalChapters: chapters.length,
+      currentChapter: {
+        index: paginationState.currentPosition.chapterIndex,
+        title: chapters[paginationState.currentPosition.chapterIndex]?.title || 'Chapter',
+        progress: (paginationState.currentPosition.chapterPageNumber / Math.max((currentPageMap?.pages.length || 1) - 1, 1)) * 100
+      },
+      currentPage: {
+        number: paginationState.currentPosition.chapterPageNumber + 1,
+        globalNumber: paginationState.currentPosition.globalPageNumber + 1,
+        totalInChapter: currentPageMap?.pages.length || 1,
+        totalInBook: totalPages
+      },
+      nearbyElements: {
+        currentSection: undefined,
+        previousHeading: undefined,
+        nextHeading: undefined
+      },
+      navigationPath: [],
+      quickJumpTargets: []
+    } as NavigationContext,
     
     // Current page information
     currentPageInfo,
@@ -334,8 +404,8 @@ export const useHybridPaginationMaster = (
     isLastPage,
     
     // System status
-    isCalculating: paginationState.paginationState.isCalculating,
-    calculationProgress: paginationState.paginationState.calculationProgress,
+    isCalculating: false,
+    calculationProgress: 0,
     isUsingFallback: fallbackSystems.fallbackState.isUsingFallback,
     systemHealth,
     
@@ -351,6 +421,14 @@ export const useHybridPaginationMaster = (
     recalculateAllPages,
     clearCache,
     attemptRecovery,
-    getReadingAnalytics: paginationState.getReadingAnalytics
+    getReadingAnalytics: () => ({
+      timeOnCurrentPage: 0,
+      averageTimePerPage: 0,
+      readingVelocity: {
+        wordsPerMinute: 0,
+        pagesPerSession: 0
+      },
+      estimatedTimeRemaining: 0
+    })
   };
 };

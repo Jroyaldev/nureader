@@ -1,0 +1,51 @@
+/* CSS for scroll-snap pagination */
+.pageContainer {
+  display: block;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  
+  /* Hide scrollbars for cleaner UI */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pageContainer::-webkit-scrollbar {
+  display: none;
+}
+
+.pageColumn {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  break-inside: avoid;
+}
+
+/* Ensure columns are full viewport width */
+.pageContainer[data-page-layout="single"] {
+  column-fill: auto;
+  column-gap: 2rem;
+}
+
+/* Animation classes for smooth page turns */
+.pageTransition {
+  transition: transform 0.3s ease-in-out;
+}
+
+.pageSliding {
+  scroll-behavior: smooth;
+}
+
+/* Focus and accessibility */
+.pageContainer:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .pageContainer {
+    /* Enable momentum scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
+  }
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useRef, useEffect } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { EPUBChapter, PageBreakMap, ReadingProgress, ReadingSettings } from './types';
 
 interface FallbackState {
@@ -105,6 +105,33 @@ export const useFallbackSystems = (
       return 'modern';
     }
   }, [fallbackState.errorCount, getBrowserCapabilities]);
+
+  // Error reporting for analytics and debugging
+  const reportError = useCallback((error: Error, context: ErrorContext) => {
+    const errorEntry: ErrorContext = {
+      ...context,
+      timestamp: Date.now(),
+      userAgent: navigator.userAgent,
+      stackTrace: error.stack
+    };
+
+    errorLog.current.push(errorEntry);
+    
+    // Keep only the last 50 errors to prevent memory issues
+    if (errorLog.current.length > 50) {
+      errorLog.current = errorLog.current.slice(-50);
+    }
+
+    // In a real application, you might send this to an error tracking service
+    if (process.env.NODE_ENV === 'development') {
+      console.group('Error Report');
+      console.error('Error:', error);
+      console.log('Context:', context);
+      console.log('Fallback State:', fallbackState);
+      console.log('Browser Capabilities:', getBrowserCapabilities());
+      console.groupEnd();
+    }
+  }, [fallbackState, getBrowserCapabilities]);
 
   // Create a fallback page map when normal calculation fails
   const createFallbackPageMap = useCallback((
@@ -347,33 +374,6 @@ export const useFallbackSystems = (
     }
   }, [fallbackState.recoveryAttempts, chapters, createFallbackPageMap]);
 
-  // Error reporting for analytics and debugging
-  const reportError = useCallback((error: Error, context: ErrorContext) => {
-    const errorEntry: ErrorContext = {
-      ...context,
-      timestamp: Date.now(),
-      userAgent: navigator.userAgent,
-      stackTrace: error.stack
-    };
-
-    errorLog.current.push(errorEntry);
-    
-    // Keep only the last 50 errors to prevent memory issues
-    if (errorLog.current.length > 50) {
-      errorLog.current = errorLog.current.slice(-50);
-    }
-
-    // In a real application, you might send this to an error tracking service
-    if (process.env.NODE_ENV === 'development') {
-      console.group('Error Report');
-      console.error('Error:', error);
-      console.log('Context:', context);
-      console.log('Fallback State:', fallbackState);
-      console.log('Browser Capabilities:', getBrowserCapabilities());
-      console.groupEnd();
-    }
-  }, [fallbackState, getBrowserCapabilities]);
-
   // Reset fallback state when system recovers
   const resetFallbackState = useCallback(() => {
     setFallbackState({
@@ -519,8 +519,8 @@ export class FallbackErrorBoundary extends React.Component<
       const resetError = () => this.setState({ hasError: false, error: null });
       
       if (this.props.fallbackComponent) {
-        const FallbackComponent = this.props.fallbackComponent;
-        return <FallbackComponent error={this.state.error!} resetError={resetError} />;
+        const Component = this.props.fallbackComponent;
+        return <Component error={this.state.error!} resetError={resetError} />;
       }
 
       return (

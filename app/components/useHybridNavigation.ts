@@ -464,15 +464,15 @@ export const useHybridNavigation = (
       totalInBook: totalGlobalPages
     },
     nearbyElements: {
-      currentSection: getCurrentSection(),
+      currentSection: getCurrentSection() || undefined,
       previousHeading: progress.chapterPagePosition > 0 ? 
         findNearestHeading(progress.currentChapter, 
           (pageBreakMaps.get(progress.currentChapter)?.pages[progress.chapterPagePosition - 1]?.startOffset || 0)
-        ) : null,
+        ) || undefined : undefined,
       nextHeading: progress.chapterPagePosition < progress.chapterTotalPages - 1 ? 
         findNearestHeading(progress.currentChapter,
           (pageBreakMaps.get(progress.currentChapter)?.pages[progress.chapterPagePosition + 1]?.startOffset || 0)
-        ) : null
+        ) || undefined : undefined
     },
     navigationPath: getBreadcrumbs(),
     quickJumpTargets: getQuickJumpTargets()

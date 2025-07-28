@@ -88,7 +88,11 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     timeSpent: 0,
     wordsRead: 0,
     sessionsToday: 1,
-    streak: 1
+    streak: 1,
+    globalPagePosition: 0,
+    totalGlobalPages: 1,
+    chapterPagePosition: 0,
+    chapterTotalPages: 1
   });
   const [chapterProgress, setChapterProgress] = useState(0);
 
@@ -205,9 +209,11 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       setProgress(prev => ({ ...prev, ...newProgress }));
       
       // Update current page info when navigation changes
-      const chapterMap = pageBreakMaps.get(newProgress.currentChapter);
-      if (chapterMap && chapterMap.pages[newProgress.chapterPagePosition]) {
-        setCurrentPageInfo(chapterMap.pages[newProgress.chapterPagePosition]);
+      if (typeof newProgress.currentChapter === 'number' && typeof newProgress.chapterPagePosition === 'number') {
+        const chapterMap = pageBreakMaps.get(newProgress.currentChapter);
+        if (chapterMap && chapterMap.pages[newProgress.chapterPagePosition]) {
+          setCurrentPageInfo(chapterMap.pages[newProgress.chapterPagePosition]);
+        }
       }
     }
   );
@@ -1035,7 +1041,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
                     <ContextualInfo
                       navigationContext={hybridNavigation.navigationContext}
                       progress={enhancedProgress}
-                      currentPageInfo={currentPageInfo}
+                      currentPageInfo={currentPageInfo || undefined}
                       currentChapter={chapters[progress.currentChapter]}
                       showVelocity={true}
                       showContentAnalysis={true}
@@ -1100,7 +1106,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
             <ContextualInfo
               navigationContext={hybridNavigation.navigationContext}
               progress={enhancedProgress}
-              currentPageInfo={currentPageInfo}
+              currentPageInfo={currentPageInfo || undefined}
               currentChapter={chapters[progress.currentChapter]}
               position="floating"
               autoHide={settings.readingMode === 'immersive'}

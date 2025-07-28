@@ -105,39 +105,34 @@ export class SmartPageBreaker {
     chapterIndex: number,
     globalPageOffset: number
   ): PageBreakResult {
-    const textContent = this.cleanContent(content);
     const targetWordsPerPage = this.calculateTargetWordsPerPage(analysis.contentMetrics);
     const pages: PageInfo[] = [];
     const issues: PageBreakIssue[] = [];
 
-    let currentOffset = 0;
-    let pageNumber = 0;
-    let globalPageNumber = globalPageOffset;
+    // Use HTML-aware page generation
+    const htmlPages = this.generatePagesFromHTML(
+      content,
+      targetWordsPerPage,
+      globalPageOffset
+    );
 
-    while (currentOffset < textContent.length) {
-      const pageResult = this.generateSinglePage(
-        textContent,
-        analysis.breakPoints,
-        analysis.semanticElements,
-        currentOffset,
-        targetWordsPerPage,
-        pageNumber,
-        globalPageNumber
-      );
-
-      pages.push(pageResult.page);
-      issues.push(...pageResult.issues);
-
-      currentOffset = pageResult.page.endOffset;
-      pageNumber++;
-      globalPageNumber++;
-
-      // Safety check to prevent infinite loops
-      if (pageNumber > 1000) {
-        console.warn('SmartPageBreaker: Maximum page limit reached, breaking');
-        break;
-      }
-    }
+    // Convert HTML pages to PageInfo format
+    htmlPages.forEach((htmlPage, index) => {
+      const pageInfo: PageInfo = {
+        id: `page-${index}-${Date.now()}`,
+        pageNumber: index,
+        globalPageNumber: globalPageOffset + index,
+        startOffset: htmlPage.startOffset,
+        endOffset: htmlPage.endOffset,
+        wordCount: htmlPage.wordCount,
+        estimatedReadTime: Math.ceil(htmlPage.wordCount / 250),
+        hasImages: htmlPage.hasImages,
+        hasTables: htmlPage.hasTables,
+        contentDensity: htmlPage.wordCount < 200 ? 'low' : htmlPage.wordCount > 400 ? 'high' : 'medium',
+        breakQuality: htmlPage.breakQuality
+      };
+      pages.push(pageInfo);
+    });
 
     const qualityScores = pages.map(p => p.breakQuality);
     const totalQuality = qualityScores.reduce((sum, score) => sum + score, 0);
@@ -448,16 +443,23 @@ export class SmartPageBreaker {
    * Calculate target words per page based on content analysis
    */
   private calculateTargetWordsPerPage(metrics: ContentMetrics): number {
-    let baseTarget = Math.floor(
-      (this.settings.screenHeight * this.settings.screenWidth) / 
-      (this.settings.fontSize * this.settings.lineHeight * 12)
-    );
+    // Start with a reasonable base target based on reading research
+    // Typical comfortable reading is 250-350 words per page
+    let baseTarget = 300;
+    
+    // Adjust slightly based on screen size (but keep it reasonable)
+    const screenArea = this.settings.screenWidth * this.settings.screenHeight;
+    const normalArea = 1920 * 1080; // Reference desktop size
+    const areaRatio = Math.sqrt(screenArea / normalArea);
+    
+    // Scale by area ratio but cap the adjustment
+    baseTarget = Math.floor(baseTarget * Math.max(0.7, Math.min(1.3, areaRatio)));
 
     // Adjust based on content complexity
     if (metrics.complexityScore > 7) {
       baseTarget = Math.floor(baseTarget * 0.8); // Smaller pages for complex text
     } else if (metrics.complexityScore < 4) {
-      baseTarget = Math.floor(baseTarget * 1.2); // Larger pages for simple text
+      baseTarget = Math.floor(baseTarget * 1.1); // Slightly larger pages for simple text
     }
 
     // Adjust based on content density
@@ -467,10 +469,10 @@ export class SmartPageBreaker {
       baseTarget = Math.floor(baseTarget * 1.1);
     }
 
-    // Ensure within bounds
+    // Ensure within reasonable bounds (never too large)
     return Math.max(
       this.options.minimumWordsPerPage,
-      Math.min(this.options.maximumWordsPerPage, baseTarget)
+      Math.min(Math.min(this.options.maximumWordsPerPage, 450), baseTarget)
     );
   }
 
@@ -716,6 +718,122 @@ export class SmartPageBreaker {
       .replace(/<[^>]*>/g, ' ') // Remove HTML tags
       .replace(/\s+/g, ' ') // Normalize whitespace
       .trim();
+  }
+
+  /**
+   * Generate pages from HTML content preserving structure
+   */
+  private generatePagesFromHTML(
+    htmlContent: string,
+    targetWordsPerPage: number,
+    globalPageOffset: number
+  ): Array<{
+    startOffset: number;
+    endOffset: number;
+    wordCount: number;
+    hasImages: boolean;
+    hasTables: boolean;
+    breakQuality: number;
+  }> {
+    const pages: Array<{
+      startOffset: number;
+      endOffset: number;
+      wordCount: number;
+      hasImages: boolean;
+      hasTables: boolean;
+      breakQuality: number;
+    }> = [];
+
+    // Simple regex-based approach to find good break points in HTML
+    const blockElements = [
+      '</p>', '</div>', '</section>', '</article>', 
+      '</h1>', '</h2>', '</h3>', '</h4>', '</h5>', '</h6>',
+      '</blockquote>', '</li>', '</td>', '</th>'
+    ];
+
+    let currentOffset = 0;
+    let currentWordCount = 0;
+    let pageStartOffset = 0;
+    let lastGoodBreak = 0;
+    let inTag = false;
+    let tagDepth = 0;
+
+    // Walk through the HTML character by character
+    for (let i = 0; i < htmlContent.length; i++) {
+      const char = htmlContent[i];
+      
+      // Track if we're inside a tag
+      if (char === '<') {
+        inTag = true;
+        
+        // Check if this is a closing tag of a block element
+        for (const blockEnd of blockElements) {
+          if (htmlContent.substr(i, blockEnd.length) === blockEnd) {
+            lastGoodBreak = i + blockEnd.length;
+            break;
+          }
+        }
+      } else if (char === '>') {
+        inTag = false;
+      }
+      
+      // Count words in text content (outside tags)
+      if (!inTag && /\s/.test(char)) {
+        // Check if previous characters formed a word
+        let j = i - 1;
+        while (j >= 0 && !/\s/.test(htmlContent[j]) && htmlContent[j] !== '>') {
+          j--;
+        }
+        if (i - j > 1) {
+          currentWordCount++;
+        }
+      }
+      
+      // Check if we should create a page break
+      if (currentWordCount >= targetWordsPerPage && lastGoodBreak > pageStartOffset) {
+        // Scan the page content for special elements
+        const pageContent = htmlContent.substring(pageStartOffset, lastGoodBreak);
+        const hasImages = /<img[^>]*>/i.test(pageContent);
+        const hasTables = /<table[^>]*>/i.test(pageContent);
+        
+        pages.push({
+          startOffset: pageStartOffset,
+          endOffset: lastGoodBreak,
+          wordCount: currentWordCount,
+          hasImages,
+          hasTables,
+          breakQuality: 8 // Good quality for block element boundaries
+        });
+        
+        // Reset for next page
+        pageStartOffset = lastGoodBreak;
+        currentWordCount = 0;
+        
+        // Safety check
+        if (pages.length > 1000) {
+          console.warn('SmartPageBreaker: Maximum page limit reached');
+          break;
+        }
+      }
+    }
+    
+    // Handle remaining content
+    if (pageStartOffset < htmlContent.length) {
+      const pageContent = htmlContent.substring(pageStartOffset);
+      const plainText = pageContent.replace(/<[^>]*>/g, ' ').trim();
+      const words = plainText.split(/\s+/).filter(w => w.length > 0);
+      
+      pages.push({
+        startOffset: pageStartOffset,
+        endOffset: htmlContent.length,
+        wordCount: words.length,
+        hasImages: /<img[^>]*>/i.test(pageContent),
+        hasTables: /<table[^>]*>/i.test(pageContent),
+        breakQuality: 10 // Perfect quality for end of content
+      });
+    }
+    
+    return pages;
   }
 }
 

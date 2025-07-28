@@ -69,9 +69,12 @@ const HybridReaderView = React.memo(({
   const lastNavigationTime = useRef(0);
   const NAVIGATION_THROTTLE = 150; // ms
 
+  // Determine if we're in fallback mode (no pagination)
+  const isInFallbackMode = !pageBreakMap || !currentPageInfo;
+  
   // Extract current page content based on page break map
   const currentPageContent = useMemo(() => {
-    if (!pageBreakMap || !currentPageInfo || !content) {
+    if (isInFallbackMode || !content) {
       return content; // Fallback to full content
     }
 
@@ -90,8 +93,7 @@ const HybridReaderView = React.memo(({
       const walker = document.createTreeWalker(
         tempDiv,
         NodeFilter.SHOW_TEXT,
-        null,
-        false
+        null
       );
 
       let currentOffset = 0;
@@ -431,7 +433,8 @@ const HybridReaderView = React.memo(({
         <div
           ref={pageContentRef}
           className={classNames(
-            'prose prose-lg max-w-none h-full overflow-hidden',
+            'prose prose-lg max-w-none',
+            isInFallbackMode ? 'overflow-auto' : 'h-full overflow-hidden',
             modeClasses[settings.readingMode],
             // Enhanced typography classes
             'prose-headings:font-serif prose-headings:font-medium',
@@ -460,7 +463,7 @@ const HybridReaderView = React.memo(({
             maxWidth: settings.readingMode === 'normal' ? '100%' : 
                      settings.readingMode === 'focus' ? '75ch' : '65ch',
             margin: '0 auto',
-            minHeight: '100vh'
+            minHeight: isInFallbackMode ? 'auto' : '100vh'
           }}
         />
         

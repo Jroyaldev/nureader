@@ -16,6 +16,7 @@ import {
   renderHighlights
 } from './highlightUtils';
 import styles from './PageTurnAnimation.module.css';
+import scrollSnapStyles from './PageScrollSnap.module.css';
 
 interface ReaderViewProps {
   content: string;
@@ -77,10 +78,22 @@ const ReaderView = React.memo(({
     
     // For page-based layout
     if (settings.pageLayout === 'single') {
-      // Allow layout to settle before calculating
+      // Allow layout to settle and force a reflow before calculating
       setTimeout(() => {
         try {
+          // Force the container to apply column layout
           const containerWidth = container.clientWidth;
+          const containerHeight = container.clientHeight;
+          
+          // Set column width to viewport width to ensure proper pagination
+          content.style.columnWidth = `${containerWidth}px`;
+          content.style.columnGap = `${settings.marginSize * 2}px`;
+          content.style.columnFill = 'auto';
+          content.style.height = `${containerHeight}px`;
+          
+          // Force reflow
+          content.offsetHeight;
+          
           const contentWidth = content.scrollWidth;
           
           if (containerWidth <= 0 || contentWidth <= 0) {
@@ -89,15 +102,19 @@ const ReaderView = React.memo(({
             return;
           }
           
+          // After setting columnWidth, scrollWidth should reflect multiple columns
           const pages = Math.max(1, Math.ceil(contentWidth / containerWidth));
           
           // Add debug logging in development
           if (process.env.NODE_ENV === 'development') {
-            console.log('Page calculation:', {
+            console.log('CSS Column Page calculation:', {
               containerWidth,
+              containerHeight,
               contentWidth,
               calculatedPages: pages,
-              currentPage
+              currentPage,
+              columnWidth: content.style.columnWidth,
+              columnGap: content.style.columnGap
             });
           }
           
@@ -106,7 +123,7 @@ const ReaderView = React.memo(({
           console.error('Error calculating pages:', error);
           setTotalPages(1);
         }
-      }, 50);
+      }, 150);
     } else {
       // For continuous scroll, we still need a page count for progress
       setTotalPages(1);
@@ -143,7 +160,16 @@ const ReaderView = React.memo(({
           }
           setIsAnimating(false);
         } else {
-          setCurrentPage(prev => Math.min(prev + 1, totalPages - 1));
+          const newPage = Math.min(currentPage + 1, totalPages - 1);
+          setCurrentPage(newPage);
+          // Scroll to the new page using CSS columns
+          if (container) {
+            const pageWidth = container.clientWidth;
+            container.scrollTo({
+              left: newPage * pageWidth,
+              behavior: 'smooth'
+            });
+          }
         }
       } else {
         if (currentPage <= 0) {
@@ -152,7 +178,16 @@ const ReaderView = React.memo(({
           }
           setIsAnimating(false);
         } else {
-          setCurrentPage(prev => Math.max(prev - 1, 0));
+          const newPage = Math.max(currentPage - 1, 0);
+          setCurrentPage(newPage);
+          // Scroll to the new page using CSS columns
+          if (container) {
+            const pageWidth = container.clientWidth;
+            container.scrollTo({
+              left: newPage * pageWidth,
+              behavior: 'smooth'
+            });
+          }
         }
       }
     } else {
@@ -434,9 +469,11 @@ const ReaderView = React.memo(({
         className={classNames(
           'h-full transition-transform duration-300 ease-in-out',
           getPageClasses(),
+          scrollSnapStyles.pageContainer,
           {
             'pointer-events-none': isAnimating,
-            'will-change-transform': settings.pageLayout === 'single'
+            'will-change-transform': settings.pageLayout === 'single',
+            [scrollSnapStyles.pageSliding]: settings.pageLayout === 'single'
           }
         )}
         style={{
@@ -478,11 +515,8 @@ const ReaderView = React.memo(({
             maxWidth: settings.readingMode === 'normal' ? '100%' : settings.readingMode === 'focus' ? '75ch' : '65ch',
             margin: '0 auto',
             ...(settings.pageLayout === 'single' ? {
-              columnCount: 1,
-              columnGap: `${settings.marginSize * 2}px`,
-              columnFill: 'auto',
+              // CSS columns will be set dynamically in calculatePages
               minHeight: '100vh',
-              width: `${100 / totalPages}%`,
               flex: 'none'
             } : {
               minHeight: '100vh'

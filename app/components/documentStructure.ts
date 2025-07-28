@@ -7,7 +7,9 @@ import {
   SectionInfo, 
   SpecialContentInfo,
   ReadingFlowInfo,
-  SemanticBlock 
+  SemanticBlock,
+  FlowInterruption,
+  NaturalPause
 } from './types';
 
 export interface DocumentStructureAnalyzer {
@@ -485,7 +487,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
   }
 
   private buildHierarchyPath(headings: Element[], currentIndex: number): string[] {
-    const path = [];
+    const path: string[] = [];
     const currentLevel = parseInt(headings[currentIndex].tagName.charAt(1));
     
     // Look backwards to build the hierarchy path
@@ -523,7 +525,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
   }
 
   private extractHeadingKeywords(text: string): string[] {
-    const keywords = [];
+    const keywords: string[] = [];
     const words = text.toLowerCase().split(/\s+/);
     
     // Common important keywords in headings
@@ -1096,7 +1098,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
   }
 
   private identifyNaturalPauses(textContent: string) {
-    const pauses = [];
+    const pauses: NaturalPause[] = [];
     const patterns = [
       { pattern: /\. [A-Z]/g, type: 'sentence_end', strength: 'medium' },
       { pattern: /[!?] [A-Z]/g, type: 'exclamation_question', strength: 'high' },
@@ -1111,8 +1113,8 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
       while ((match = pattern.exec(textContent)) !== null) {
         pauses.push({
           position: match.index,
-          type,
-          strength
+          type: type as NaturalPause['type'],
+          strength: strength as NaturalPause['strength']
         });
       }
     });
@@ -1132,7 +1134,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
   }
 
   private identifyFlowInterruptions(container: Element) {
-    const interruptions = [];
+    const interruptions: FlowInterruption[] = [];
     
     // Tables interrupting text flow
     const tables = container.querySelectorAll('table');
@@ -1236,7 +1238,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
     const totalEmotionalWords = positiveCount + negativeCount + neutralCount;
     
     if (totalEmotionalWords === 0) {
-      return { tone: 'neutral', confidence: 'low' };
+      return { tone: 'neutral' as const, confidence: 'low' as const };
     }
     
     const positiveRatio = positiveCount / totalEmotionalWords;
@@ -1291,7 +1293,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
   // Semantic block identification methods...
   
   private identifyDialogueBlocks(container: Element): SemanticBlock[] {
-    const blocks = [];
+    const blocks: SemanticBlock[] = [];
     const paragraphs = Array.from(container.querySelectorAll('p'));
     
     paragraphs.forEach((p, index) => {
@@ -1326,7 +1328,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
   }
 
   private identifyNarrativeBlocks(container: Element): SemanticBlock[] {
-    const blocks = [];
+    const blocks: SemanticBlock[] = [];
     const paragraphs = Array.from(container.querySelectorAll('p'));
     
     paragraphs.forEach((p, index) => {
@@ -1362,7 +1364,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
       /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/gi
     ];
     
-    const references = [];
+    const references: string[] = [];
     timePatterns.forEach(pattern => {
       const matches = text.match(pattern);
       if (matches) references.push(...matches);
@@ -1372,7 +1374,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
   }
 
   private identifyDescriptiveBlocks(container: Element): SemanticBlock[] {
-    const blocks = [];
+    const blocks: SemanticBlock[] = [];
     const paragraphs = Array.from(container.querySelectorAll('p'));
     
     paragraphs.forEach((p, index) => {
@@ -1405,7 +1407,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
   }
 
   private identifyExpositoryBlocks(container: Element): SemanticBlock[] {
-    const blocks = [];
+    const blocks: SemanticBlock[] = [];
     const paragraphs = Array.from(container.querySelectorAll('p'));
     
     paragraphs.forEach((p, index) => {
@@ -1434,7 +1436,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
   }
 
   private identifyArgumentativeBlocks(container: Element): SemanticBlock[] {
-    const blocks = [];
+    const blocks: SemanticBlock[] = [];
     const paragraphs = Array.from(container.querySelectorAll('p'));
     
     paragraphs.forEach((p, index) => {
@@ -1463,7 +1465,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
   }
 
   private identifyTransitionalBlocks(container: Element): SemanticBlock[] {
-    const blocks = [];
+    const blocks: SemanticBlock[] = [];
     const paragraphs = Array.from(container.querySelectorAll('p'));
     
     paragraphs.forEach((p, index) => {
@@ -1497,7 +1499,7 @@ class DocumentStructureAnalyzerImpl implements DocumentStructureAnalyzer {
 
   private refineSemanticBoundaries(blocks: SemanticBlock[]): SemanticBlock[] {
     // Merge adjacent blocks of the same type
-    const refinedBlocks = [];
+    const refinedBlocks: SemanticBlock[] = [];
     let currentBlock = null;
     
     for (const block of blocks) {
