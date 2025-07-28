@@ -10,15 +10,23 @@ import { useMobileCapabilities } from './useMobileTouch';
 import ErrorBoundary from './ErrorBoundary';
 import ControlsBar from './ControlsBar';
 import ProgressBar from './ProgressBar';
+import HybridProgressBar from './HybridProgressBar';
+import NavigationBreadcrumbs from './NavigationBreadcrumbs';
+import ReadingMiniMap from './ReadingMiniMap';
+import ContextualInfo from './ContextualInfo';
 import TOCModal from './TOCModal';
 import BookmarksModal from './BookmarksModal';
 import SearchModal from './SearchModal';
 import SettingsModal from './SettingsModal';
 import HighlightsModal from './HighlightsModal';
 import ReaderView from './ReaderView';
+import HybridReaderView from './HybridReaderView';
 import LoadingState from './LoadingState';
 import { useEPUBLoader } from './useEPUBLoader';
+import { useHybridNavigation } from './useHybridNavigation';
 import { useToast } from './useToast';
+import { SmartPageBreaker } from './smartPageBreaker';
+import { ContentAnalysisUtils } from './contentAnalyzer';
 import { useHighlights } from './useHighlights';
 import { ToastContainer } from './Toast';
 import {
@@ -28,7 +36,10 @@ import {
   ReadingSettings,
   ReadingProgress,
   SearchResult,
-  Highlight
+  Highlight,
+  NavigationContext,
+  PageBreakMap,
+  PageInfo
 } from './types';
 
 interface EPUBReaderProps {
@@ -165,6 +176,42 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     importHighlights
   } = useHighlights(bookId);
 
+  // Enhanced Navigation State
+  const [showMiniMap, setShowMiniMap] = useState(false);
+  const [showContextualInfo, setShowContextualInfo] = useState(false);
+  const [pageBreakMaps, setPageBreakMaps] = useState<Map<number, PageBreakMap>>(new Map());
+  const [currentPageInfo, setCurrentPageInfo] = useState<PageInfo | null>(null);
+  const [isCalculatingPages, setIsCalculatingPages] = useState(false);
+  const [pageCalculationProgress, setPageCalculationProgress] = useState(0);
+  
+  // Enhanced progress state with hybrid navigation support
+  const [enhancedProgress, setEnhancedProgress] = useState<ReadingProgress>({
+    ...progress,
+    globalPagePosition: 0,
+    totalGlobalPages: 0,
+    chapterPagePosition: 0,
+    chapterTotalPages: 1
+  });
+
+  // Hybrid navigation hook - only initialize when page breaks are ready
+  const hybridNavigation = useHybridNavigation(
+    chapters,
+    pageBreakMaps,
+    enhancedProgress,
+    bookmarks,
+    highlights,
+    (newProgress) => {
+      setEnhancedProgress(prev => ({ ...prev, ...newProgress }));
+      setProgress(prev => ({ ...prev, ...newProgress }));
+      
+      // Update current page info when navigation changes
+      const chapterMap = pageBreakMaps.get(newProgress.currentChapter);
+      if (chapterMap && chapterMap.pages[newProgress.chapterPagePosition]) {
+        setCurrentPageInfo(chapterMap.pages[newProgress.chapterPagePosition]);
+      }
+    }
+  );
+
   // Update settings handler
   const updateSettings = useCallback((newSettings: Partial<ReadingSettings>) => {
     setSettings(prev => {
@@ -199,18 +246,167 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     }
   }, [bookmarks]);
 
-  // Load EPUB using the optimized hook
+  // Load EPUB using the optimized hook and calculate page breaks
   useEffect(() => {
     const loadEPUBFile = async () => {
       try {
         const { chapters: loadedChapters, resources: loadedResources } = await loadEPUB(file);
         setChapters(loadedChapters);
         setResources(loadedResources);
-        setProgress(prev => ({
-          ...prev,
-          totalPages: 1 // Will be updated per chapter
-        }));
-        success('Book loaded successfully', `Loaded ${loadedChapters.length} chapters`);
+        
+        // Don't try to render until page breaks are calculated
+        if (loadedChapters.length === 0) {
+          showError('No chapters found', 'The EPUB file appears to be empty');
+          return;
+        }
+        
+        // Calculate page breaks for all chapters
+        setIsCalculatingPages(true);
+        setPageCalculationProgress(0);
+        info('Calculating page layout...');
+        
+        try {
+          const newPageBreakMaps = new Map<number, PageBreakMap>();
+          let globalPageOffset = 0;
+          let totalGlobalPages = 0;
+          
+          // Calculate page breaks for each chapter
+          for (let i = 0; i < loadedChapters.length; i++) {
+            const chapter = loadedChapters[i];
+            setPageCalculationProgress(Math.round((i / loadedChapters.length) * 100));
+            
+            // Analyze chapter content
+            const analysis = await ContentAnalysisUtils.analyzeContent(chapter.content);
+            
+            // Create page breaker with current settings
+            const pageBreaker = new SmartPageBreaker(
+              {
+                fontSize: settings.fontSize,
+                lineHeight: settings.lineHeight,
+                columnWidth: settings.columnWidth,
+                marginSize: settings.marginSize,
+                pageLayout: settings.pageLayout,
+                screenWidth: window.innerWidth,
+                screenHeight: window.innerHeight,
+                preferredWordsPerPage: 300,
+                allowOrphanLines: false,
+                respectImageBoundaries: true,
+                respectTableBoundaries: true
+              },
+              {
+                respectSentences: true,
+                respectParagraphs: true,
+                respectHeadings: true,
+                respectImages: true,
+                respectTables: true,
+                respectQuotes: true,
+                respectCodeBlocks: true,
+                minimumWordsPerPage: 200,
+                maximumWordsPerPage: 400,
+                allowSplitParagraphs: false,
+                preferredBreakElements: ['p', 'div', 'section', 'article']
+              }
+            );
+            
+            // Generate optimal pages
+            const pageBreakResult = pageBreaker.generateOptimalPages(
+              chapter.content,
+              analysis,
+              i,
+              globalPageOffset
+            );
+            
+            // Create page break map
+            const pageBreakMap: PageBreakMap = {
+              chapterIndex: i,
+              pages: pageBreakResult.pages,
+              breakPoints: analysis.breakPoints,
+              lastCalculated: Date.now(),
+              settings: {
+                fontSize: settings.fontSize,
+                lineHeight: settings.lineHeight,
+                columnWidth: settings.columnWidth,
+                marginSize: settings.marginSize,
+                pageLayout: settings.pageLayout,
+                screenWidth: window.innerWidth,
+                screenHeight: window.innerHeight,
+                preferredWordsPerPage: 300,
+                allowOrphanLines: false,
+                respectImageBoundaries: true,
+                respectTableBoundaries: true
+              }
+            };
+            
+            newPageBreakMaps.set(i, pageBreakMap);
+            globalPageOffset += pageBreakResult.pages.length;
+            totalGlobalPages += pageBreakResult.pages.length;
+          }
+          
+          setPageBreakMaps(newPageBreakMaps);
+          
+          // Set initial page info for first chapter
+          const firstChapterMap = newPageBreakMaps.get(0);
+          if (firstChapterMap && firstChapterMap.pages.length > 0) {
+            setCurrentPageInfo(firstChapterMap.pages[0]);
+          }
+          
+          // Update progress with proper page counts
+          setProgress(prev => ({
+            ...prev,
+            totalPages: firstChapterMap?.pages.length || 1,
+            chapterTotalPages: firstChapterMap?.pages.length || 1
+          }));
+          
+          setEnhancedProgress(prev => ({
+            ...prev,
+            totalGlobalPages,
+            chapterTotalPages: firstChapterMap?.pages.length || 1
+          }));
+          
+          success('Book loaded successfully', `${loadedChapters.length} chapters, ${totalGlobalPages} pages`);
+        } catch (err) {
+          console.error('Failed to calculate page breaks:', err);
+          showError('Failed to calculate page layout', 'The book will use default pagination');
+          // Create minimal page break maps as fallback
+          const fallbackMaps = new Map<number, PageBreakMap>();
+          loadedChapters.forEach((chapter, i) => {
+            fallbackMaps.set(i, {
+              chapterIndex: i,
+              pages: [{
+                id: `page-${i}-0`,
+                pageNumber: 0,
+                globalPageNumber: i,
+                startOffset: 0,
+                endOffset: chapter.content.length,
+                wordCount: chapter.wordCount,
+                estimatedReadTime: chapter.estimatedReadTime,
+                hasImages: false,
+                hasTables: false,
+                contentDensity: 'medium',
+                breakQuality: 5
+              }],
+              breakPoints: [],
+              lastCalculated: Date.now(),
+              settings: {
+                fontSize: settings.fontSize,
+                lineHeight: settings.lineHeight,
+                columnWidth: settings.columnWidth,
+                marginSize: settings.marginSize,
+                pageLayout: settings.pageLayout,
+                screenWidth: window.innerWidth,
+                screenHeight: window.innerHeight,
+                preferredWordsPerPage: 300,
+                allowOrphanLines: false,
+                respectImageBoundaries: true,
+                respectTableBoundaries: true
+              }
+            });
+          });
+          setPageBreakMaps(fallbackMaps);
+        } finally {
+          setIsCalculatingPages(false);
+          setPageCalculationProgress(100);
+        }
       } catch (err) {
         console.error('Failed to load EPUB:', err);
         showError('Failed to load book', 'Please check that the file is a valid EPUB format');
@@ -218,7 +414,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     };
 
     loadEPUBFile();
-  }, [file, loadEPUB, success, showError]);
+  }, [file, loadEPUB, success, showError, info, settings.fontSize, settings.lineHeight, settings.columnWidth, settings.marginSize, settings.pageLayout]);
 
 
   // Enhanced search with better performance
@@ -322,6 +518,14 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
 
   const handleProgressChange = useCallback((progress: number) => {
     setChapterProgress(progress);
+  }, []);
+
+  const handlePageChange = useCallback((currentPage: number, totalPages: number) => {
+    setProgress(prev => ({
+      ...prev,
+      currentPage: currentPage + 1, // Convert from 0-based to 1-based
+      totalPages
+    }));
   }, []);
 
   // Bookmark handlers
@@ -599,6 +803,15 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
           [settings.theme]: true
         }
       )}>
+      {/* Enhanced Navigation Breadcrumbs */}
+      {settings.readingMode !== 'immersive' && (
+        <NavigationBreadcrumbs
+          navigationContext={hybridNavigation.navigationContext}
+          compact={capabilities.isSmallScreen}
+          showQuickJump={!capabilities.isSmallScreen}
+        />
+      )}
+
       {/* Controls */}
       <ControlsBar
         onToggleTOC={() => setShowTOC(true)}
@@ -608,13 +821,27 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         onToggleHighlights={() => setShowHighlights(true)}
         onToggleFullscreen={toggleFullscreen}
         onToggleReadingMode={toggleReadingMode}
+        onToggleMiniMap={() => setShowMiniMap(!showMiniMap)}
+        onToggleContextualInfo={() => setShowContextualInfo(!showContextualInfo)}
         settings={settings}
         onUpdateSettings={updateSettings}
         isLoading={isLoading}
         currentChapter={progress.currentChapter}
         chapters={chapters}
         isFullscreen={isFullscreen}
-        progress={progress}
+        progress={enhancedProgress}
+        navigationContext={hybridNavigation.navigationContext}
+        onNavigateNext={() => hybridNavigation.navigateToChapterPage(progress.currentChapter, progress.chapterPagePosition + 1)}
+        onNavigatePrevious={() => hybridNavigation.navigateToChapterPage(progress.currentChapter, Math.max(0, progress.chapterPagePosition - 1))}
+        onNavigateToChapterStart={() => hybridNavigation.navigateToChapterPage(progress.currentChapter, 0)}
+        onNavigateToChapterEnd={() => {
+          const pageMap = pageBreakMaps.get(progress.currentChapter);
+          const lastPage = (pageMap?.pages.length || 1) - 1;
+          hybridNavigation.navigateToChapterPage(progress.currentChapter, lastPage);
+        }}
+        showPageBoundaries={true}
+        canNavigateNext={progress.currentChapter < chapters.length - 1 || progress.chapterPagePosition < progress.chapterTotalPages - 1}
+        canNavigatePrevious={progress.currentChapter > 0 || progress.chapterPagePosition > 0}
       />
       
       {/* Immersive Mode Floating Controls */}
@@ -740,33 +967,89 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
                 <div className="text-gray-600 dark:text-gray-400">{error}</div>
               </div>
             </div>
-          ) : isLoading ? (
+          ) : isLoading || isCalculatingPages ? (
             <LoadingState 
-              progress={loadingProgress} 
-              stage={loadingStage}
-              showSkeleton={loadingProgress > 50}
+              progress={isCalculatingPages ? pageCalculationProgress : loadingProgress} 
+              stage={isCalculatingPages ? 'Calculating page layout...' : loadingStage}
+              showSkeleton={loadingProgress > 50 || isCalculatingPages}
             />
-          ) : chapters.length > 0 ? (
-            <ReaderView
-              key={`${progress.currentChapter}-${isFullscreen}`} // Force re-render on fullscreen change
-              content={chapters[progress.currentChapter]?.content || ''}
-              settings={settings}
-              onNextChapter={handleNextChapter}
-              onPrevChapter={handlePrevChapter}
-              onProgressChange={handleProgressChange}
-              isFirstChapter={progress.currentChapter === 0}
-              isLastChapter={progress.currentChapter === chapters.length - 1}
-              chapterProgress={chapterProgress}
-              highlights={getHighlightsForChapter(progress.currentChapter)}
-              onHighlight={handleHighlightCreate}
-              isLoading={false}
-              isTransitioning={false}
-            />
+          ) : chapters.length > 0 && pageBreakMaps.size > 0 ? (
+            <div className="flex flex-1 min-h-0">
+              {/* Main Reader Content */}
+              <div className="flex-1 relative">
+                <HybridReaderView
+                  key={`${progress.currentChapter}-${isFullscreen}`}
+                  content={chapters[progress.currentChapter]?.content || ''}
+                  settings={settings}
+                  pageBreakMap={pageBreakMaps.get(progress.currentChapter) || null}
+                  currentPageInfo={currentPageInfo}
+                  navigationContext={hybridNavigation.navigationContext}
+                  highlights={getHighlightsForChapter(progress.currentChapter)}
+                  onHighlight={handleHighlightCreate}
+                  onHighlightClick={(highlight) => {
+                    hybridNavigation.navigateToPosition(highlight.chapterIndex, highlight.startOffset);
+                  }}
+                  onNavigateNext={() => {
+                    const pageMap = pageBreakMaps.get(progress.currentChapter);
+                    const nextPage = progress.chapterPagePosition + 1;
+                    if (pageMap && nextPage < pageMap.pages.length) {
+                      hybridNavigation.navigateToChapterPage(progress.currentChapter, nextPage);
+                    } else {
+                      handleNextChapter();
+                    }
+                  }}
+                  onNavigatePrevious={() => {
+                    const prevPage = progress.chapterPagePosition - 1;
+                    if (prevPage >= 0) {
+                      hybridNavigation.navigateToChapterPage(progress.currentChapter, prevPage);
+                    } else {
+                      handlePrevChapter();
+                    }
+                  }}
+                  onProgressChange={handleProgressChange}
+                  isLoading={false}
+                  isTransitioning={false}
+                />
+              </div>
+
+              {/* Side Navigation Panels */}
+              {!capabilities.isSmallScreen && settings.readingMode !== 'immersive' && (
+                <div className="flex flex-col space-y-4 p-4 w-80 bg-gray-50/50 dark:bg-gray-900/50 backdrop-blur-sm">
+                  {/* Reading Mini Map */}
+                  {showMiniMap && (
+                    <ReadingMiniMap
+                      navigationContext={hybridNavigation.navigationContext}
+                      chapters={chapters}
+                      pageBreakMaps={pageBreakMaps}
+                      bookmarks={bookmarks}
+                      highlights={highlights}
+                      onNavigateToPage={(globalPage) => hybridNavigation.navigateToGlobalPage(globalPage)}
+                      onNavigateToChapter={(chapterIndex) => hybridNavigation.navigateToChapterPage(chapterIndex, 0)}
+                      collapsed={false}
+                      onToggleCollapsed={() => setShowMiniMap(false)}
+                    />
+                  )}
+
+                  {/* Contextual Information */}
+                  {showContextualInfo && (
+                    <ContextualInfo
+                      navigationContext={hybridNavigation.navigationContext}
+                      progress={enhancedProgress}
+                      currentPageInfo={currentPageInfo}
+                      currentChapter={chapters[progress.currentChapter]}
+                      showVelocity={true}
+                      showContentAnalysis={true}
+                      showReadingGoals={true}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
           ) : null}
         </div>
       </ErrorBoundary>
 
-      {/* Progress Bar */}
+      {/* Enhanced Progress Bar */}
       {!isLoading && chapters.length > 0 && (
         <div className={classNames(
           'transition-all duration-300',
@@ -777,12 +1060,56 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
             'relative': !isFullscreen
           }
         )}>
-          <ProgressBar 
-            progress={progress} 
+          <HybridProgressBar 
+            navigationContext={hybridNavigation.navigationContext}
+            progress={enhancedProgress} 
             settings={settings}
             onToggleStats={() => setShowStats(true)}
+            onNavigateToProgress={(globalProgress) => {
+              const targetGlobalPage = Math.floor((globalProgress / 100) * enhancedProgress.totalGlobalPages);
+              hybridNavigation.navigateToGlobalPage(targetGlobalPage);
+            }}
+            compact={capabilities.isSmallScreen}
+            showEstimates={!capabilities.isSmallScreen}
           />
         </div>
+      )}
+
+      {/* Mobile Navigation Components */}
+      {capabilities.isSmallScreen && (
+        <>
+          {/* Floating Mini Map (Mobile) */}
+          {showMiniMap && (
+            <div className="fixed bottom-20 right-4 z-50 max-w-xs">
+              <ReadingMiniMap
+                navigationContext={hybridNavigation.navigationContext}
+                chapters={chapters}
+                pageBreakMaps={pageBreakMaps}
+                bookmarks={bookmarks}
+                highlights={highlights}
+                onNavigateToPage={(globalPage) => hybridNavigation.navigateToGlobalPage(globalPage)}
+                onNavigateToChapter={(chapterIndex) => hybridNavigation.navigateToChapterPage(chapterIndex, 0)}
+                collapsed={false}
+                onToggleCollapsed={() => setShowMiniMap(false)}
+              />
+            </div>
+          )}
+
+          {/* Floating Contextual Info (Mobile) */}
+          {showContextualInfo && (
+            <ContextualInfo
+              navigationContext={hybridNavigation.navigationContext}
+              progress={enhancedProgress}
+              currentPageInfo={currentPageInfo}
+              currentChapter={chapters[progress.currentChapter]}
+              position="floating"
+              autoHide={settings.readingMode === 'immersive'}
+              showVelocity={true}
+              showContentAnalysis={false}
+              showReadingGoals={true}
+            />
+          )}
+        </>
       )}
 
       {/* Floating Bookmark Button */}

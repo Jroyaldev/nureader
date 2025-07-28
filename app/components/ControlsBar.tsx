@@ -13,10 +13,16 @@ import {
   IoColorPalette,
   IoEye,
   IoColorWand,
-  IoEllipsisHorizontal
+  IoEllipsisHorizontal,
+  IoChevronBackOutline,
+  IoChevronForwardOutline,
+  IoPlaySkipBackOutline,
+  IoPlaySkipForwardOutline,
+  IoNavigateOutline,
+  IoLocateOutline
 } from 'react-icons/io5';
 import classNames from 'classnames';
-import { ReadingSettings, ReadingProgress, EPUBChapter } from './types';
+import { ReadingSettings, ReadingProgress, EPUBChapter, NavigationContext } from './types';
 import { useMobileCapabilities } from './useMobileTouch';
 
 interface ControlsBarProps {
@@ -27,6 +33,8 @@ interface ControlsBarProps {
   onToggleHighlights?: () => void;
   onToggleFullscreen: () => void;
   onToggleReadingMode: () => void;
+  onToggleMiniMap?: () => void;
+  onToggleContextualInfo?: () => void;
   settings: ReadingSettings;
   onUpdateSettings: (settings: Partial<ReadingSettings>) => void;
   isLoading: boolean;
@@ -34,6 +42,15 @@ interface ControlsBarProps {
   chapters: EPUBChapter[];
   isFullscreen: boolean;
   progress: ReadingProgress;
+  navigationContext?: NavigationContext;
+  // Hybrid navigation controls
+  onNavigateNext?: () => void;
+  onNavigatePrevious?: () => void;
+  onNavigateToChapterStart?: () => void;
+  onNavigateToChapterEnd?: () => void;
+  showPageBoundaries?: boolean;
+  canNavigateNext?: boolean;
+  canNavigatePrevious?: boolean;
 }
 
 const ControlsBar = React.memo(({
@@ -44,13 +61,23 @@ const ControlsBar = React.memo(({
   onToggleHighlights,
   onToggleFullscreen,
   onToggleReadingMode,
+  onToggleMiniMap,
+  onToggleContextualInfo,
   settings,
   onUpdateSettings,
   isLoading,
   currentChapter,
   chapters,
   isFullscreen,
-  progress
+  progress,
+  navigationContext,
+  onNavigateNext,
+  onNavigatePrevious,
+  onNavigateToChapterStart,
+  onNavigateToChapterEnd,
+  showPageBoundaries = false,
+  canNavigateNext = true,
+  canNavigatePrevious = true
 }: ControlsBarProps) => {
   const capabilities = useMobileCapabilities();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -183,6 +210,26 @@ const ControlsBar = React.memo(({
                         <span className="text-xs font-medium">Highlights</span>
                       </button>
                     )}
+                    {onToggleMiniMap && (
+                      <button
+                        onClick={() => { onToggleMiniMap(); setShowMobileMenu(false); }}
+                        className="control-button group flex flex-col items-center gap-2 p-4 rounded-xl min-h-[60px]"
+                        aria-label="Reading Map"
+                      >
+                        <IoNavigateOutline className="w-6 h-6" />
+                        <span className="text-xs font-medium">Map</span>
+                      </button>
+                    )}
+                    {onToggleContextualInfo && (
+                      <button
+                        onClick={() => { onToggleContextualInfo(); setShowMobileMenu(false); }}
+                        className="control-button group flex flex-col items-center gap-2 p-4 rounded-xl min-h-[60px]"
+                        aria-label="Reading Info"
+                      >
+                        <IoLocateOutline className="w-6 h-6" />
+                        <span className="text-xs font-medium">Info</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -221,11 +268,93 @@ const ControlsBar = React.memo(({
                 <IoColorWand className="w-5 h-5 transition-transform group-hover:scale-110" />
               </button>
             )}
+            
+            {/* Navigation Controls Separator */}
+            {(onNavigatePrevious || onNavigateNext || onToggleMiniMap || onToggleContextualInfo) && (
+              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
+            )}
+            
+            {/* Chapter Navigation */}
+            {onNavigateToChapterStart && (
+              <button
+                onClick={onNavigateToChapterStart}
+                className="control-button group"
+                aria-label="Go to chapter start"
+                disabled={!canNavigatePrevious}
+              >
+                <IoPlaySkipBackOutline className="w-5 h-5 transition-transform group-hover:scale-110" />
+              </button>
+            )}
+            
+            {/* Page Navigation */}
+            {onNavigatePrevious && (
+              <button
+                onClick={onNavigatePrevious}
+                className={classNames(
+                  'control-button group',
+                  {
+                    'opacity-50 cursor-not-allowed': !canNavigatePrevious
+                  }
+                )}
+                aria-label="Previous page"
+                disabled={!canNavigatePrevious}
+              >
+                <IoChevronBackOutline className="w-5 h-5 transition-transform group-hover:scale-110" />
+              </button>
+            )}
+            
+            {onNavigateNext && (
+              <button
+                onClick={onNavigateNext}
+                className={classNames(
+                  'control-button group',
+                  {
+                    'opacity-50 cursor-not-allowed': !canNavigateNext
+                  }
+                )}
+                aria-label="Next page"
+                disabled={!canNavigateNext}
+              >
+                <IoChevronForwardOutline className="w-5 h-5 transition-transform group-hover:scale-110" />
+              </button>
+            )}
+            
+            {onNavigateToChapterEnd && (
+              <button
+                onClick={onNavigateToChapterEnd}
+                className="control-button group"
+                aria-label="Go to chapter end"
+                disabled={!canNavigateNext}
+              >
+                <IoPlaySkipForwardOutline className="w-5 h-5 transition-transform group-hover:scale-110" />
+              </button>
+            )}
+            
+            {/* Enhanced Navigation Tools */}
+            {onToggleMiniMap && (
+              <button
+                onClick={onToggleMiniMap}
+                className="control-button group"
+                aria-label="Toggle reading map"
+              >
+                <IoNavigateOutline className="w-5 h-5 transition-transform group-hover:scale-110" />
+              </button>
+            )}
+            
+            {onToggleContextualInfo && (
+              <button
+                onClick={onToggleContextualInfo}
+                className="control-button group"
+                aria-label="Toggle contextual info"
+              >
+                <IoLocateOutline className="w-5 h-5 transition-transform group-hover:scale-110" />
+              </button>
+            )}
           </>
         )}
       </div>
 
-      {/* Center: Chapter Info with Progress */}
+      {/* Center: Enhanced Chapter Info with Hybrid Navigation Context */}
       <div className={classNames(
         'flex-1 text-center',
         {
@@ -246,19 +375,61 @@ const ControlsBar = React.memo(({
               : (chapters[currentChapter]?.title || `Chapter ${currentChapter + 1}`)
           )}
         </div>
-        {!capabilities.isSmallScreen && (
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {!isLoading && chapters[currentChapter] && (
-              <>
-                {chapters[currentChapter].estimatedReadTime} min read • 
-                {Math.round(progress.overallProgress)}% complete
-              </>
+        
+        {/* Enhanced Progress Information */}
+        {!capabilities.isSmallScreen && navigationContext && (
+          <div className="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+            <div>
+              {!isLoading && chapters[currentChapter] && (
+                <>
+                  {chapters[currentChapter].estimatedReadTime} min read • 
+                  {Math.round(progress.overallProgress)}% complete
+                </>
+              )}
+            </div>
+            
+            {/* Hybrid navigation context */}
+            {navigationContext.currentPage.totalInChapter > 1 && (
+              <div className="flex items-center justify-center space-x-2">
+                <span>
+                  Page {navigationContext.currentPage.number} of {navigationContext.currentPage.totalInChapter}
+                </span>
+                {showPageBoundaries && (
+                  <>
+                    <span>•</span>
+                    <span className="text-blue-500 dark:text-blue-400">
+                      Global: {navigationContext.currentPage.globalNumber} / {navigationContext.currentPage.totalInBook}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+            
+            {/* Current section context */}
+            {navigationContext.nearbyElements.currentSection && (
+              <div className="text-gray-400 dark:text-gray-500 italic truncate max-w-64 mx-auto">
+                {navigationContext.nearbyElements.currentSection}
+              </div>
             )}
           </div>
         )}
+        
+        {/* Mobile simplified view */}
         {capabilities.isSmallScreen && (
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            {!isLoading && Math.round(progress.overallProgress)}% complete
+            {!isLoading && (
+              <div className="flex items-center justify-center space-x-2">
+                <span>{Math.round(progress.overallProgress)}% complete</span>
+                {navigationContext && navigationContext.currentPage.totalInChapter > 1 && (
+                  <>
+                    <span>•</span>
+                    <span>
+                      Pg {navigationContext.currentPage.number}/{navigationContext.currentPage.totalInChapter}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

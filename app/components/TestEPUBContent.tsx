@@ -4,6 +4,45 @@
 export const generateTestChapters = () => {
   const chapters = [];
   
+  // Add edge case chapters first
+  chapters.push({
+    id: 'chapter-empty',
+    href: 'empty.xhtml',
+    title: 'Empty Chapter',
+    subtitle: 'Testing empty content handling',
+    level: 1,
+    content: '',
+    wordCount: 0,
+    estimatedReadTime: 0
+  });
+  
+  chapters.push({
+    id: 'chapter-minimal',
+    href: 'minimal.xhtml',
+    title: 'Minimal Chapter',
+    subtitle: 'Testing minimal content',
+    level: 1,
+    content: '<p>Single paragraph.</p>',
+    wordCount: 2,
+    estimatedReadTime: 1
+  });
+  
+  chapters.push({
+    id: 'chapter-images',
+    href: 'images.xhtml',
+    title: 'Image Chapter',
+    subtitle: 'Testing image handling',
+    level: 1,
+    content: `
+      <h1>Chapter with Images</h1>
+      <p>This chapter tests image handling and layout.</p>
+      <img src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200'><rect width='100%' height='100%' fill='%23ddd'/><text x='50%' y='50%' text-anchor='middle' dy='.3em'>Test Image</text></svg>" alt="Test Image" />
+      <p>Text after image should layout correctly.</p>
+    `,
+    wordCount: 15,
+    estimatedReadTime: 1
+  });
+  
   for (let i = 1; i <= 5; i++) {
     chapters.push({
       id: `chapter-${i}`,
