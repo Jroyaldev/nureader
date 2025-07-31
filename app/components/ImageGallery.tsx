@@ -37,6 +37,18 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({
   }, [isOpen, initialIndex]);
 
   // Keyboard navigation
+  const handlePrevious = useCallback(() => {
+    if (images.length <= 1) return;
+    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
+    resetZoom();
+  }, [images.length, resetZoom]);
+
+  const handleNext = useCallback(() => {
+    if (images.length <= 1) return;
+    setCurrentIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
+    resetZoom();
+  }, [images.length, resetZoom]);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -67,18 +79,6 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose, handlePrevious, handleNext, handleZoomIn, handleZoomOut, resetZoom]);
-
-  const handlePrevious = useCallback(() => {
-    if (images.length <= 1) return;
-    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
-    resetZoom();
-  }, [images.length, resetZoom]);
-
-  const handleNext = useCallback(() => {
-    if (images.length <= 1) return;
-    setCurrentIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
-    resetZoom();
-  }, [images.length, resetZoom]);
 
   const handleZoomIn = useCallback(() => {
     setTransform(prev => ({

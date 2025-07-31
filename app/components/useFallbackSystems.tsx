@@ -528,7 +528,7 @@ export class FallbackErrorBoundary extends React.Component<
           <div className="mb-4">
             <h2 className="text-2xl font-bold text-red-600 mb-2">Something went wrong</h2>
             <p className="text-gray-600 dark:text-gray-400 mb-4">
-              The reading experience encountered an error, but we're working to fix it.
+              The reading experience encountered an error, but we&apos;re working to fix it.
             </p>
           </div>
           
