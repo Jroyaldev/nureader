@@ -306,11 +306,41 @@ export const useMobileCapabilities = () => {
     supportsPinchZoom: false,
     supportsOrientationChange: false,
     devicePixelRatio: 1,
-    maxTouchPoints: 0
+    maxTouchPoints: 0,
+    isIOS: false,
+    isAndroid: false,
+    supportsPassiveEvents: false,
+    screenSize: 'desktop' as 'mobile' | 'tablet' | 'desktop'
   });
 
   useEffect(() => {
     const updateCapabilities = () => {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isIOS = /iphone|ipad|ipod/.test(userAgent);
+      const isAndroid = /android/.test(userAgent);
+      
+      // Test for passive event support
+      let supportsPassiveEvents = false;
+      try {
+        const opts = Object.defineProperty({}, 'passive', {
+          get() {
+            supportsPassiveEvents = true;
+            return false;
+          }
+        });
+        window.addEventListener('testPassive', () => {}, opts);
+        window.removeEventListener('testPassive', () => {}, opts);
+      } catch (e) {
+        supportsPassiveEvents = false;
+      }
+      
+      let screenSize: 'mobile' | 'tablet' | 'desktop' = 'desktop';
+      if (window.innerWidth < 768) {
+        screenSize = 'mobile';
+      } else if (window.innerWidth < 1024) {
+        screenSize = 'tablet';
+      }
+      
       setCapabilities({
         isTouchDevice: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
         hasHover: window.matchMedia('(hover: hover)').matches,
@@ -318,18 +348,30 @@ export const useMobileCapabilities = () => {
         supportsPinchZoom: 'ontouchstart' in window && navigator.maxTouchPoints > 1,
         supportsOrientationChange: 'orientation' in screen,
         devicePixelRatio: window.devicePixelRatio || 1,
-        maxTouchPoints: navigator.maxTouchPoints || 0
+        maxTouchPoints: navigator.maxTouchPoints || 0,
+        isIOS,
+        isAndroid,
+        supportsPassiveEvents,
+        screenSize
       });
     };
 
     updateCapabilities();
 
+    // Debounce resize events for better performance
+    let resizeTimeout: NodeJS.Timeout;
+    const debouncedUpdate = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(updateCapabilities, 250);
+    };
+    
     // Listen for resize and orientation changes
-    window.addEventListener('resize', updateCapabilities);
+    window.addEventListener('resize', debouncedUpdate);
     window.addEventListener('orientationchange', updateCapabilities);
 
     return () => {
-      window.removeEventListener('resize', updateCapabilities);
+      clearTimeout(resizeTimeout);
+      window.removeEventListener('resize', debouncedUpdate);
       window.removeEventListener('orientationchange', updateCapabilities);
     };
   }, []);

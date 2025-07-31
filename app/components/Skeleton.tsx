@@ -2,7 +2,7 @@
 
 import React from 'react';
 import classNames from 'classnames';
-import { useMotionPreferences } from './useMotionPreferences';
+import { useMotionPreferences } from '../hooks/useMotionPreferences';
 
 interface SkeletonProps {
   className?: string;

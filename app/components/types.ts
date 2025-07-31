@@ -14,15 +14,26 @@ export interface EPUBResource {
   href: string;
   mediaType: string;
   data: string;
+  base64Data?: string; // For images, keep base64 as fallback
+  size?: number; // File size in bytes
+  blob?: Blob; // For images, the actual blob data
+}
+
+export interface Bookmark {
+  id: string;
+  chapterIndex: number;
+  chapterProgress: number; // 0-100% within chapter
+  note?: string;
+  createdAt: Date;
 }
 
 export interface BookmarkWithNote {
+  id: string;
   chapterIndex: number;
-  position: number;
+  chapterProgress: number; // 0-100% within chapter
   note: string;
   category: string;
   createdAt: number;
-  id: string;
 }
 
 export interface ReadingSettings {
@@ -32,20 +43,18 @@ export interface ReadingSettings {
   letterSpacing: number;
   columnWidth: number;
   marginSize: number;
-  pageLayout: 'single' | 'double' | 'continuous';
   readingMode: 'normal' | 'focus' | 'immersive';
   theme: 'light' | 'dark' | 'sepia';
   backgroundMusic: boolean;
   autoPageTurn: boolean;
   readingGoal: number;
-  pageAnimation?: 'flip' | 'slide' | 'fade' | 'none';
 }
 
 export interface ReadingProgress {
   currentChapter: number;
-  currentPage: number;
-  totalPages: number;
-  overallProgress: number;
+  totalChapters: number;
+  chapterProgress: number; // 0-100% within current chapter
+  overallProgress: number; // 0-100% of entire book
   timeSpent: number;
   wordsRead: number;
   sessionsToday: number;
@@ -386,4 +395,9 @@ export interface OptimalBreakPoint {
     comprehension: 'positive' | 'neutral' | 'negative';
     accessibility: 'positive' | 'neutral' | 'negative';
   };
+}
+
+export interface EPUBReaderProps {
+  file: File;
+  onHighlight?: (text: string) => void;
 }

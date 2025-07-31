@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { IoBookmarkOutline, IoBookmark, IoSettings, IoEye } from 'react-icons/io5';
 import debounce from 'lodash.debounce';
 import classNames from 'classnames';
-import { useMobileCapabilities } from './useMobileTouch';
+import { useMobileCapabilities } from '../hooks/useMobileTouch';
 
 // Import optimized components
 import ErrorBoundary from './ErrorBoundary';
@@ -20,18 +20,15 @@ import SearchModal from './SearchModal';
 import SettingsModal from './SettingsModal';
 import HighlightsModal from './HighlightsModal';
 import ReaderView from './ReaderView';
-import HybridReaderView from './HybridReaderView';
+import ChapterView from './ChapterView';
 import LoadingState from './LoadingState';
-import { useEPUBLoader } from './useEPUBLoader';
-import { useHybridNavigation } from './useHybridNavigation';
-import { useToast } from './useToast';
-import { SmartPageBreaker } from './smartPageBreaker';
-import { ContentAnalysisUtils } from './contentAnalyzer';
-import { useHighlights } from './useHighlights';
+import { useEPUBLoader } from '../hooks/useEPUBLoader';
+import { useEpubJsBook } from '../hooks/useEpubJsBook';
+import { useToast } from '../hooks/useToast';
+import { useHighlights } from '../hooks/useHighlights';
 import { ToastContainer } from './Toast';
 import {
   EPUBChapter,
-  EPUBResource,
   BookmarkWithNote,
   ReadingSettings,
   ReadingProgress,
@@ -47,25 +44,28 @@ interface EPUBReaderProps {
   onHighlight?: (text: string) => void;
 }
 
-
-
-
-
-
-
-
-
 const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
   // Mobile capabilities
   const capabilities = useMobileCapabilities();
   
-  // Core state
-  const [chapters, setChapters] = useState<EPUBChapter[]>([]);
-  const [resources, setResources] = useState<Map<string, EPUBResource>>(new Map());
+  // Use the new epubjs hook
+  const {
+    book,
+    chapters,
+    currentChapter,
+    isLoading,
+    error,
+    loadingProgress,
+    loadChapter,
+    goToChapter,
+    nextChapter,
+    prevChapter,
+    searchBook
+  } = useEpubJsBook(file);
   
-  // Use the optimized EPUB loader hook
-  const { loadEPUB, loadingState } = useEPUBLoader();
-  const { isLoading, progress: loadingProgress, stage: loadingStage, error } = loadingState;
+  // Current chapter content
+  const [chapterContent, setChapterContent] = useState<string>('');
+  const [isLoadingChapter, setIsLoadingChapter] = useState(false);
   
   // Toast notifications
   const { toasts, removeToast, success, error: showError, info } = useToast();
@@ -82,8 +82,8 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
   // Reading state
   const [progress, setProgress] = useState<ReadingProgress>({
     currentChapter: 0,
-    currentPage: 1,
-    totalPages: 1,
+    totalChapters: 0,
+    chapterProgress: 0,
     overallProgress: 0,
     timeSpent: 0,
     wordsRead: 0,
@@ -106,13 +106,11 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         letterSpacing: 0,
         columnWidth: 65,
         marginSize: 40,
-        pageLayout: 'single',
         readingMode: 'normal',
         theme: 'light',
         backgroundMusic: false,
         autoPageTurn: false,
-        readingGoal: 30,
-        pageAnimation: 'flip'
+        readingGoal: 30
       };
     }
     
@@ -140,13 +138,11 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       letterSpacing: 0,
       columnWidth: 65,
       marginSize: 40,
-      pageLayout: 'single',
       readingMode: 'normal',
       theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
       backgroundMusic: false,
       autoPageTurn: false,
-      readingGoal: 30,
-      pageAnimation: prefersReducedMotion ? 'fade' : (isMobile ? 'slide' : 'flip')
+      readingGoal: 30
     };
   });
 
@@ -252,10 +248,29 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     }
   }, [bookmarks]);
 
+<<<<<<< HEAD
   // Load EPUB using the optimized hook and calculate page breaks
+=======
+  // Update progress when chapters are loaded
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
   useEffect(() => {
-    const loadEPUBFile = async () => {
+    if (chapters.length > 0) {
+      setProgress(prev => ({
+        ...prev,
+        currentChapter,
+        totalChapters: chapters.length
+      }));
+    }
+  }, [chapters, currentChapter]);
+
+  // Load chapter content when chapter changes
+  useEffect(() => {
+    if (!book || chapters.length === 0) return;
+
+    const loadCurrentChapter = async () => {
+      setIsLoadingChapter(true);
       try {
+<<<<<<< HEAD
         const { chapters: loadedChapters, resources: loadedResources } = await loadEPUB(file);
         setChapters(loadedChapters);
         setResources(loadedResources);
@@ -412,18 +427,33 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         } finally {
           setIsCalculatingPages(false);
           setPageCalculationProgress(100);
+=======
+        const content = await loadChapter(currentChapter);
+        setChapterContent(content);
+        setChapterProgress(0);
+        
+        // Show success message only on initial load
+        if (currentChapter === 0 && !error) {
+          success('Book loaded successfully', `${chapters.length} chapters available`);
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
         }
       } catch (err) {
-        console.error('Failed to load EPUB:', err);
-        showError('Failed to load book', 'Please check that the file is a valid EPUB format');
+        console.error('Failed to load chapter:', err);
+        showError('Failed to load chapter', 'Please try again');
+      } finally {
+        setIsLoadingChapter(false);
       }
     };
 
+<<<<<<< HEAD
     loadEPUBFile();
   }, [file, loadEPUB, success, showError, info, settings.fontSize, settings.lineHeight, settings.columnWidth, settings.marginSize, settings.pageLayout]);
+=======
+    loadCurrentChapter();
+  }, [book, chapters, currentChapter, loadChapter, success, showError, error]);
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
 
-
-  // Enhanced search with better performance
+  // Enhanced search with epubjs
   const handleSearch = useMemo(
     () => debounce(async (query: string) => {
       if (!query.trim()) {
@@ -434,55 +464,25 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
 
       setIsSearching(true);
       
-      // Use setTimeout to avoid blocking UI
-      setTimeout(() => {
-        const results: { chapterIndex: number; snippet: string; position: number }[] = [];
-        const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-
-        chapters.forEach((chapter, index) => {
-          try {
-            let match;
-            let foundCount = 0;
-            const content = chapter.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-            
-            if (!content) return; // Skip empty content
-            
-            // Reset regex lastIndex to avoid issues with global regex
-            regex.lastIndex = 0;
-            
-            while ((match = regex.exec(content)) !== null && foundCount < 5) {
-              const snippetStart = Math.max(match.index - 50, 0);
-              const snippetEnd = Math.min(match.index + query.length + 50, content.length);
-              let snippet = content.substring(snippetStart, snippetEnd);
-              
-              // Escape the snippet content before adding highlight markup
-              snippet = snippet.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-              snippet = snippet.replace(new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), (m) => `<mark class="bg-yellow-200 dark:bg-yellow-800">${m}</mark>`);
-              
-              if (snippetStart > 0) snippet = '...' + snippet;
-              if (snippetEnd < content.length) snippet = snippet + '...';
-
-              const position = Math.round((match.index / content.length) * 100);
-              
-              results.push({ chapterIndex: index, snippet, position });
-              foundCount++;
-              
-              // Prevent infinite loops with zero-width matches
-              if (match.index === regex.lastIndex) {
-                regex.lastIndex++;
-              }
-            }
-          } catch (searchErr) {
-            console.warn(`Search failed for chapter ${index}:`, searchErr);
-          }
-        });
-
+      try {
+        const results = await searchBook(query);
         setSearchResults(results);
         setCurrentSearchIndex(0);
+        
+        if (results.length === 0) {
+          info(`No results found for "${query}"`);
+        } else {
+          info(`Found ${results.length} result${results.length === 1 ? '' : 's'} for "${query}"`);
+        }
+      } catch (error) {
+        console.error('Search error:', error);
+        showError('Search failed', 'An error occurred while searching. Please try again.');
+        setSearchResults([]);
+      } finally {
         setIsSearching(false);
-      }, 100);
-    }, 300),
-    [chapters]
+      }
+    }, 400),
+    [searchBook, info, showError]
   );
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -493,34 +493,18 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
 
   // Navigation handlers
   const handlePrevChapter = useCallback(() => {
-    if (progress.currentChapter > 0) {
-      setProgress(prev => ({
-        ...prev,
-        currentChapter: prev.currentChapter - 1
-      }));
-      setChapterProgress(0);
-    }
-  }, [progress.currentChapter]);
+    prevChapter();
+  }, [prevChapter]);
 
   const handleNextChapter = useCallback(() => {
-    if (progress.currentChapter < chapters.length - 1) {
-      setProgress(prev => ({
-        ...prev,
-        currentChapter: prev.currentChapter + 1
-      }));
-      setChapterProgress(0);
-    }
-  }, [progress.currentChapter, chapters.length]);
+    nextChapter();
+  }, [nextChapter]);
 
   const handleChapterSelect = useCallback((index: number) => {
-    setProgress(prev => ({
-      ...prev,
-      currentChapter: index
-    }));
-    setChapterProgress(0);
+    goToChapter(index);
     setShowTOC(false);
     setShowBookmarks(false);
-  }, []);
+  }, [goToChapter]);
 
   const handleProgressChange = useCallback((progress: number) => {
     setChapterProgress(progress);
@@ -536,30 +520,29 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
 
   // Bookmark handlers
   const toggleBookmark = useCallback(() => {
-    const bookmarkId = `${progress.currentChapter}-${chapterProgress}-${Date.now()}`;
-    const currentPosition = Math.round(chapterProgress);
+    const bookmarkId = `${currentChapter}-${chapterProgress}-${Date.now()}`;
     
     const existingBookmark = bookmarks.find(b => 
-      b.chapterIndex === progress.currentChapter && 
-      Math.abs(b.position - currentPosition) < 5
+      b.chapterIndex === currentChapter && 
+      Math.abs(b.chapterProgress - chapterProgress) < 5
     );
 
     if (existingBookmark) {
       setBookmarks(prev => prev.filter(b => b.id !== existingBookmark.id));
-      success('Bookmark removed', `Removed bookmark from ${chapters[progress.currentChapter]?.title || 'chapter'}`);
+      success('Bookmark removed', `Removed bookmark from ${chapters[currentChapter]?.title || 'chapter'}`);
     } else {
       const newBookmark: BookmarkWithNote = {
         id: bookmarkId,
-        chapterIndex: progress.currentChapter,
-        position: currentPosition,
+        chapterIndex: currentChapter,
+        chapterProgress: chapterProgress,
         note: '',
         category: '',
         createdAt: Date.now()
       };
       setBookmarks(prev => [...prev, newBookmark]);
-      success('Bookmark added', `Bookmarked ${chapters[progress.currentChapter]?.title || 'chapter'}`);
+      success('Bookmark added', `Bookmarked ${chapters[currentChapter]?.title || 'chapter'}`);
     }
-  }, [progress.currentChapter, chapterProgress, bookmarks, success, chapters]);
+  }, [currentChapter, chapterProgress, bookmarks, success, chapters]);
 
   const updateBookmarkNote = useCallback((bookmarkId: string, note: string) => {
     setBookmarks(prev => prev.map(b => b.id === bookmarkId ? { ...b, note } : b));
@@ -577,13 +560,10 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
   }, [success]);
 
   const handleBookmarkSelect = useCallback((chapterIndex: number, position: number) => {
-    setProgress(prev => ({
-      ...prev,
-      currentChapter: chapterIndex
-    }));
+    goToChapter(chapterIndex);
     setChapterProgress(position);
     setShowBookmarks(false);
-  }, []);
+  }, [goToChapter]);
 
   // Search navigation
   const navigateSearchResult = useCallback((direction: 'next' | 'prev') => {
@@ -598,23 +578,20 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
   }, [searchResults.length]);
 
   const handleSearchSelect = useCallback((chapterIndex: number, position: number) => {
-    setProgress(prev => ({
-      ...prev,
-      currentChapter: chapterIndex
-    }));
+    goToChapter(chapterIndex);
     setChapterProgress(position);
     setShowSearch(false);
-  }, []);
+  }, [goToChapter]);
 
   // Highlight handlers
   const handleHighlightCreate = useCallback((text: string, color: Highlight['color'], startOffset: number, endOffset: number) => {
     const highlight = addHighlight({
-      chapterIndex: progress.currentChapter,
+      chapterIndex: currentChapter,
       text,
       color,
       startOffset,
       endOffset,
-      pageNumber: 1 // Not used in continuous scroll mode
+      pageNumber: 1 // Not used in chapter mode
     });
     
     // Call the original onHighlight callback for AI analysis
@@ -623,16 +600,13 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     }
     
     return highlight;
-  }, [progress.currentChapter, addHighlight, onHighlight]);
+  }, [currentChapter, addHighlight, onHighlight]);
 
   const handleHighlightSelect = useCallback((chapterIndex: number, startOffset: number) => {
-    setProgress(prev => ({
-      ...prev,
-      currentChapter: chapterIndex
-    }));
+    goToChapter(chapterIndex);
     // TODO: Scroll to highlight position
     setShowHighlights(false);
-  }, []);
+  }, [goToChapter]);
 
   const handleHighlightUpdateNote = useCallback((id: string, note: string) => {
     updateHighlight(id, { note });
@@ -642,24 +616,46 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     updateHighlight(id, { color });
   }, [updateHighlight]);
 
-  // Fullscreen handling with better error handling and fallbacks
+  // Enhanced fullscreen handling with better cross-browser compatibility
   const toggleFullscreen = useCallback(async () => {
     try {
-      if (!document.fullscreenElement) {
-        // Try multiple fullscreen API methods for better compatibility
+      const isCurrentlyFullscreen = !!(document.fullscreenElement || 
+                                       (document as any).webkitFullscreenElement || 
+                                       (document as any).mozFullScreenElement || 
+                                       (document as any).msFullscreenElement);
+      
+      if (!isCurrentlyFullscreen) {
+        // Enter fullscreen
         const elem = document.getElementById('reader-container') || document.documentElement;
+        
+        // Try different fullscreen methods in order of preference
         if (elem.requestFullscreen) {
-          await elem.requestFullscreen();
+          await elem.requestFullscreen({ navigationUI: 'hide' });
         } else if ((elem as any).webkitRequestFullscreen) {
+          // Safari
           await (elem as any).webkitRequestFullscreen();
         } else if ((elem as any).mozRequestFullScreen) {
+          // Firefox
           await (elem as any).mozRequestFullScreen();
         } else if ((elem as any).msRequestFullscreen) {
+          // IE/Edge
           await (elem as any).msRequestFullscreen();
         } else {
-          throw new Error('Fullscreen API not supported');
+          // Fallback for unsupported browsers
+          setIsFullscreen(true);
+          document.body.style.overflow = 'hidden';
+          elem.style.position = 'fixed';
+          elem.style.top = '0';
+          elem.style.left = '0';
+          elem.style.width = '100vw';
+          elem.style.height = '100vh';
+          elem.style.zIndex = '9999';
+          elem.style.backgroundColor = 'var(--background)';
+          info('Pseudo-fullscreen mode activated');
+          return;
         }
       } else {
+        // Exit fullscreen
         if (document.exitFullscreen) {
           await document.exitFullscreen();
         } else if ((document as any).webkitExitFullscreen) {
@@ -668,13 +664,27 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
           await (document as any).mozCancelFullScreen();
         } else if ((document as any).msExitFullscreen) {
           await (document as any).msExitFullscreen();
+        } else {
+          // Fallback exit
+          setIsFullscreen(false);
+          document.body.style.overflow = '';
+          const elem = document.getElementById('reader-container');
+          if (elem) {
+            elem.style.position = '';
+            elem.style.top = '';
+            elem.style.left = '';
+            elem.style.width = '';
+            elem.style.height = '';
+            elem.style.zIndex = '';
+            elem.style.backgroundColor = '';
+          }
         }
       }
     } catch (err) {
       console.warn('Fullscreen operation failed:', err);
-      showError('Fullscreen not supported', 'This feature may not be available on your device');
+      showError('Fullscreen not supported', 'This feature may not be available on your device or browser');
     }
-  }, [showError]);
+  }, [showError, info]);
 
   // Reading mode cycling
   const toggleReadingMode = useCallback(() => {
@@ -689,26 +699,19 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     if (chapters.length === 0) return;
     
     // Calculate progress based on chapters completed + current chapter progress
-    const chaptersCompleted = progress.currentChapter;
+    const chaptersCompleted = currentChapter;
     const currentChapterProgressFraction = chapterProgress / 100;
     const overallProgress = ((chaptersCompleted + currentChapterProgressFraction) / chapters.length) * 100;
-    
-    // Calculate words read
-    const wordsReadFromCompletedChapters = chapters.slice(0, progress.currentChapter)
-      .reduce((total, chapter) => total + chapter.wordCount, 0);
-    
-    const wordsReadFromCurrentChapter = (chapters[progress.currentChapter]?.wordCount || 0) * currentChapterProgressFraction;
-    
-    const totalWordsRead = wordsReadFromCompletedChapters + wordsReadFromCurrentChapter;
 
     setProgress(prev => ({
       ...prev,
-      overallProgress: Math.min(100, Math.max(0, overallProgress)),
-      wordsRead: Math.round(totalWordsRead)
+      currentChapter,
+      totalChapters: chapters.length,
+      chapterProgress,
+      overallProgress: Math.min(100, Math.max(0, overallProgress))
     }));
-  }, [progress.currentChapter, chapterProgress, chapters]);
+  }, [currentChapter, chapterProgress, chapters]);
 
-  // Keyboard shortcuts
   // Handle fullscreen change events with proper state sync
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -740,6 +743,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
     };
   }, []);
 
+  // Keyboard shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -791,23 +795,32 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
   }, [toggleBookmark, toggleFullscreen]);
 
   const currentBookmark = bookmarks.find(b => {
-    const currentPosition = progress.totalPages > 0 
-      ? Math.round((progress.currentPage / progress.totalPages) * 100) 
-      : 0;
-    return b.chapterIndex === progress.currentChapter && 
-           Math.abs(b.position - currentPosition) < 5;
+    return b.chapterIndex === currentChapter && 
+           Math.abs(b.chapterProgress - chapterProgress) < 5;
   });
 
+  // Convert chapters to EPUBChapter format for compatibility
+  const epubChapters: EPUBChapter[] = chapters.map((ch, idx) => ({
+    id: ch.id,
+    href: ch.href,
+    title: ch.title,
+    subtitle: '',
+    level: 1,
+    content: '', // Not needed for TOC
+    wordCount: 0,
+    estimatedReadTime: Math.ceil(idx * 5) // Rough estimate
+  }));
 
   return (
     <div 
       id="reader-container"
       className={classNames(
-        'flex flex-col h-screen transition-all duration-300',
+        'h-full transition-all duration-300',
         {
           'bg-background': true,
           [settings.theme]: true
         }
+<<<<<<< HEAD
       )}>
       {/* Enhanced Navigation Breadcrumbs */}
       {settings.readingMode !== 'immersive' && (
@@ -849,6 +862,34 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
         canNavigateNext={progress.currentChapter < chapters.length - 1 || progress.chapterPagePosition < progress.chapterTotalPages - 1}
         canNavigatePrevious={progress.currentChapter > 0 || progress.chapterPagePosition > 0}
       />
+=======
+      )}
+      style={{
+        display: 'grid',
+        gridTemplateRows: 'auto 1fr auto',
+        height: '100%',
+        overflow: 'hidden'
+      }}>
+      {/* Controls */}
+      <div style={{ gridRow: '1' }}>
+        <ControlsBar
+          onToggleTOC={() => setShowTOC(true)}
+          onToggleBookmarks={() => setShowBookmarks(true)}
+          onToggleSearch={() => setShowSearch(true)}
+          onToggleSettings={() => setShowSettings(true)}
+          onToggleHighlights={() => setShowHighlights(true)}
+          onToggleFullscreen={toggleFullscreen}
+          onToggleReadingMode={toggleReadingMode}
+          settings={settings}
+          onUpdateSettings={updateSettings}
+          isLoading={isLoading}
+          currentChapter={currentChapter}
+          chapters={epubChapters}
+          isFullscreen={isFullscreen}
+          progress={progress}
+        />
+      </div>
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
       
       {/* Immersive Mode Floating Controls */}
       {settings.readingMode === 'immersive' && (
@@ -899,8 +940,8 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       {/* Modals */}
       {showTOC && (
         <TOCModal
-          chapters={chapters}
-          currentChapter={progress.currentChapter}
+          chapters={epubChapters}
+          currentChapter={currentChapter}
           onSelect={handleChapterSelect}
           onClose={() => setShowTOC(false)}
           progress={progress}
@@ -910,7 +951,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       {showBookmarks && (
         <BookmarksModal
           bookmarks={bookmarks}
-          chapters={chapters}
+          chapters={epubChapters}
           onSelect={handleBookmarkSelect}
           onDelete={deleteBookmark}
           onUpdateNote={updateBookmarkNote}
@@ -929,11 +970,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
           onNavigate={navigateSearchResult}
           onSelect={handleSearchSelect}
           onSelectHighlight={(highlight) => {
-            setProgress(prev => ({
-              ...prev,
-              currentChapter: highlight.chapterIndex,
-              currentPage: 1
-            }));
+            goToChapter(highlight.chapterIndex);
             setShowSearch(false);
           }}
           onClose={() => setShowSearch(false)}
@@ -952,7 +989,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
       {showHighlights && (
         <HighlightsModal
           highlights={highlights}
-          chapters={chapters}
+          chapters={epubChapters}
           onSelect={handleHighlightSelect}
           onDelete={deleteHighlight}
           onUpdateNote={handleHighlightUpdateNote}
@@ -965,7 +1002,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
 
       {/* Reader Content */}
       <ErrorBoundary>
-        <div className="flex-1 flex flex-col">
+        <div style={{ gridRow: '2', overflow: 'hidden', position: 'relative' }}>
           {error ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
@@ -975,9 +1012,32 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
             </div>
           ) : isLoading || isCalculatingPages ? (
             <LoadingState 
+<<<<<<< HEAD
               progress={isCalculatingPages ? pageCalculationProgress : loadingProgress} 
               stage={isCalculatingPages ? 'Calculating page layout...' : loadingStage}
               showSkeleton={loadingProgress > 50 || isCalculatingPages}
+=======
+              progress={loadingProgress} 
+              stage="Loading EPUB..."
+              showSkeleton={loadingProgress > 50}
+            />
+          ) : chapters.length > 0 ? (
+            <ChapterView
+              key={`${currentChapter}-${isFullscreen}`}
+              content={chapterContent}
+              settings={settings}
+              highlights={getHighlightsForChapter(currentChapter)}
+              onHighlight={handleHighlightCreate}
+              onProgressChange={handleProgressChange}
+              onNavigate={(direction) => {
+                if (direction === 'prev') handlePrevChapter();
+                else handleNextChapter();
+              }}
+              isFirstChapter={currentChapter === 0}
+              isLastChapter={currentChapter === chapters.length - 1}
+              isLoading={isLoadingChapter}
+              chapterTitle={chapters[currentChapter]?.title}
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
             />
           ) : chapters.length > 0 && pageBreakMaps.size > 0 ? (
             <div className="flex flex-1 min-h-0">
@@ -1057,6 +1117,7 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
 
       {/* Enhanced Progress Bar */}
       {!isLoading && chapters.length > 0 && (
+<<<<<<< HEAD
         <div className={classNames(
           'transition-all duration-300',
           {
@@ -1069,6 +1130,21 @@ const EPUBReader = ({ file, onHighlight }: EPUBReaderProps) => {
           <HybridProgressBar 
             navigationContext={hybridNavigation.navigationContext}
             progress={enhancedProgress} 
+=======
+        <div 
+          style={{ gridRow: '3' }}
+          className={classNames(
+            'transition-all duration-300',
+            {
+              'opacity-0 hover:opacity-100': settings.readingMode === 'immersive' || isFullscreen,
+              'opacity-100': settings.readingMode !== 'immersive' && !isFullscreen,
+              'fixed bottom-0 left-0 right-0 z-40': isFullscreen
+            }
+          )}
+        >
+          <ProgressBar 
+            progress={progress} 
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
             settings={settings}
             onToggleStats={() => setShowStats(true)}
             onNavigateToProgress={(globalProgress) => {

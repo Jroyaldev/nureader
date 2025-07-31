@@ -128,7 +128,7 @@ const SearchModal = React.memo(({
           ) : (
             <div className="text-center py-8">
               <IoSearch className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-              <div className="text-gray-500 dark:text-gray-400">No results found for "{query}"</div>
+              <div className="text-gray-500 dark:text-gray-400">No results found for &ldquo;{query}&rdquo;</div>
               <div className="text-sm text-gray-400 dark:text-gray-500 mt-2">
                 Try different keywords or check your spelling.
               </div>
@@ -157,7 +157,7 @@ const SearchModal = React.memo(({
                   )}
                 >
                   <p className="text-gray-900 dark:text-gray-100 text-sm">
-                    "{highlight.text}"
+                    &quot;{highlight.text}&quot;
                   </p>
                 </div>
                 {highlight.note && (

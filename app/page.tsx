@@ -185,7 +185,7 @@ export default function Home() {
             </div>
           ) : (
             /* Premium Reading Interface */
-            <div className="fixed inset-0 top-20">
+            <div className="fixed inset-0" style={{ paddingTop: '80px' }}>
               <EPUBReader file={file} onHighlight={handleHighlight} />
             </div>
           )}

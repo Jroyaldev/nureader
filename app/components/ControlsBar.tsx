@@ -23,7 +23,7 @@ import {
 } from 'react-icons/io5';
 import classNames from 'classnames';
 import { ReadingSettings, ReadingProgress, EPUBChapter, NavigationContext } from './types';
-import { useMobileCapabilities } from './useMobileTouch';
+import { useMobileCapabilities } from '../hooks/useMobileTouch';
 
 interface ControlsBarProps {
   onToggleTOC: () => void;

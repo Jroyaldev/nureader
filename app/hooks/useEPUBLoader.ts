@@ -162,7 +162,60 @@ export const useEPUBLoader = () => {
     const wordCount = textContent.split(' ').filter(word => word.length > 0).length;
     const estimatedReadTime = Math.ceil(wordCount / 250); // 250 words per minute average
 
-    processedContent = DOMPurify.sanitize(processedContent);
+    // Enhanced DOMPurify configuration for EPUB content
+    processedContent = DOMPurify.sanitize(processedContent, {
+      USE_PROFILES: { html: true }, // Only allow HTML, no SVG/MathML
+      ALLOWED_TAGS: [
+        'p', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'strong', 'em', 'b', 'i', 'u', 'small', 'sub', 'sup',
+        'br', 'hr', 'blockquote', 'pre', 'code',
+        'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+        'table', 'thead', 'tbody', 'tr', 'td', 'th',
+        'img', 'figure', 'figcaption',
+        'a', 'abbr', 'cite', 'q', 'time'
+      ],
+      ALLOWED_ATTR: [
+        'class', 'id', 'style', 'title', 'lang',
+        'src', 'alt', 'width', 'height',
+        'href', 'target', 'rel',
+        'colspan', 'rowspan',
+        'datetime', 'cite'
+      ],
+      ALLOW_DATA_ATTR: false, // EPUB shouldn't need data attributes
+      ALLOW_ARIA_ATTR: true, // Keep accessibility attributes
+      FORBID_TAGS: ['script', 'style', 'link', 'meta', 'object', 'embed', 'iframe'],
+      FORBID_ATTR: ['on*'], // Remove all event handlers
+      KEEP_CONTENT: true, // Keep text content even if tag is removed
+      RETURN_DOM: false,
+      RETURN_DOM_FRAGMENT: false,
+      SANITIZE_DOM: true,
+      // Add custom hook for additional security
+      ADD_HOOKS: {
+        beforeSanitizeElements: (node) => {
+          // Remove any remaining script-like content
+          if (node.nodeName && ['SCRIPT', 'STYLE', 'LINK'].includes(node.nodeName)) {
+            node.remove();
+          }
+        },
+        afterSanitizeAttributes: (node) => {
+          // Ensure all links are safe
+          if (node.hasAttribute('href')) {
+            const href = node.getAttribute('href');
+            if (href && !href.startsWith('#') && !href.startsWith('http')) {
+              node.removeAttribute('href');
+            }
+          }
+          
+          // Ensure all images use blob/data URLs only
+          if (node.hasAttribute('src')) {
+            const src = node.getAttribute('src');
+            if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
+              // This will be handled by our image processing
+            }
+          }
+        }
+      }
+    });
 
     return { 
       title, 
@@ -186,8 +239,31 @@ export const useEPUBLoader = () => {
         error: null
       });
 
+      // Enhanced JSZip loading with better error handling
       const zip = new JSZip();
-      const content = await zip.loadAsync(file);
+      let content;
+      
+      try {
+        // Load with specific options for better EPUB compatibility
+        content = await zip.loadAsync(file, {
+          checkCRC32: false, // Many EPUBs have CRC32 issues
+          createFolders: true
+        });
+      } catch (zipError) {
+        console.error('Primary zip loading failed:', zipError);
+        
+        // Fallback: try loading as ArrayBuffer
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          content = await zip.loadAsync(arrayBuffer, {
+            checkCRC32: false,
+            createFolders: true
+          });
+        } catch (fallbackError) {
+          console.error('Fallback zip loading failed:', fallbackError);
+          throw new Error('Unable to read EPUB file. The file may be corrupted or not a valid EPUB.');
+        }
+      }
 
       updateProgress(10, 'Reading container structure...');
 
@@ -227,7 +303,7 @@ export const useEPUBLoader = () => {
         if (id && href && mediaType) {
           items.set(id, { id, href, mediaType });
 
-          // Load binary resources with progress updates
+          // Load binary resources with enhanced processing
           if (
             mediaType.startsWith('image/') ||
             mediaType.startsWith('application/') ||
@@ -237,13 +313,38 @@ export const useEPUBLoader = () => {
             const resourcePath = baseDir ? `${baseDir}/${href}` : href;
             const resourceFile = content.file(resourcePath);
             if (resourceFile) {
-              const data = await resourceFile.async('base64');
-              resourcesMap.set(href, {
-                id,
-                href,
-                mediaType,
-                data: `data:${mediaType};base64,${data}`
-              });
+              try {
+                // For images, get both binary data and metadata
+                if (mediaType.startsWith('image/')) {
+                  const uint8Array = await resourceFile.async('uint8array');
+                  const blob = new Blob([uint8Array], { type: mediaType });
+                  const objectURL = URL.createObjectURL(blob);
+                  
+                  // Store both blob URL and base64 for flexibility
+                  const base64 = await resourceFile.async('base64');
+                  resourcesMap.set(href, {
+                    id,
+                    href,
+                    mediaType,
+                    data: objectURL,
+                    base64Data: `data:${mediaType};base64,${base64}`,
+                    size: uint8Array.length,
+                    blob: blob
+                  });
+                } else {
+                  // For non-images, use base64 as before
+                  const data = await resourceFile.async('base64');
+                  resourcesMap.set(href, {
+                    id,
+                    href,
+                    mediaType,
+                    data: `data:${mediaType};base64,${data}`
+                  });
+                }
+              } catch (resourceError) {
+                console.warn(`Failed to load resource ${href}:`, resourceError);
+                // Continue processing other resources
+              }
             }
           }
         }

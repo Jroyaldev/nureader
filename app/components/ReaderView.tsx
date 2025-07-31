@@ -6,7 +6,7 @@ import DOMPurify from 'dompurify';
 import { ReadingSettings, Highlight } from './types';
 import HighlightColorPicker from './HighlightColorPicker';
 import { ContentSkeleton } from './skeletons';
-import { useMobileTouch, useMobileCapabilities, useTouchPerformance } from './useMobileTouch';
+import { useMobileTouch, useMobileCapabilities } from '../hooks/useMobileTouch';
 import { 
   getTextSelection, 
   getSelectedText, 
@@ -57,16 +57,32 @@ const ReaderView = React.memo(({
   const [colorPickerPosition, setColorPickerPosition] = useState<{ x: number; y: number } | null>(null);
   const [selectedText, setSelectedText] = useState('');
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
+<<<<<<< HEAD
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [animationDirection, setAnimationDirection] = useState<'next' | 'prev'>('next');
+=======
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
   
   // Mobile touch capabilities and performance optimization
   const capabilities = useMobileCapabilities();
   useTouchPerformance(); // Optimize touch performance
 
+  // Show swipe hint on first load for mobile users
+  useEffect(() => {
+    if (capabilities.isTouchDevice && !localStorage.getItem('swipe-hint-shown')) {
+      setShowSwipeHint(true);
+      const timer = setTimeout(() => {
+        setShowSwipeHint(false);
+        localStorage.setItem('swipe-hint-shown', 'true');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [capabilities.isTouchDevice]);
 
+<<<<<<< HEAD
   // Calculate total pages based on content
   const calculatePages = useCallback(() => {
     const container = containerRef.current;
@@ -135,6 +151,10 @@ const ReaderView = React.memo(({
   const NAVIGATION_THROTTLE = 100; // ms
 
   // Page navigation with discrete page turns
+=======
+
+  // Enhanced page navigation with proper pagination
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
   const navigatePage = useCallback((direction: 'next' | 'prev') => {
     const container = containerRef.current;
     const now = Date.now();
@@ -145,6 +165,7 @@ const ReaderView = React.memo(({
     }
     lastNavigationTime.current = now;
     
+<<<<<<< HEAD
     if (!container || isAnimating) return;
     
     // For single page layout, use page-based navigation
@@ -200,7 +221,35 @@ const ReaderView = React.memo(({
         if (!isFirstChapter) {
           onPrevChapter();
         }
+=======
+    // Calculate page size (90% of viewport to ensure some overlap)
+    const pageSize = viewportHeight * 0.85;
+    
+    if (direction === 'next') {
+      // Check if we're at the bottom of current chapter
+      if (maxScroll <= 0 || currentScroll >= maxScroll - 20) {
+        if (!isLastChapter) {
+          onNextChapter();
+        }
+        return;
       }
+      
+      // Calculate next page position
+      const targetScroll = Math.min(currentScroll + pageSize, maxScroll);
+      container.scrollTo({ top: targetScroll, behavior: 'smooth' });
+    } else {
+      // Check if we're at the top of current chapter
+      if (currentScroll <= 20) {
+        if (!isFirstChapter) {
+          onPrevChapter();
+        }
+        return;
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
+      }
+      
+      // Calculate previous page position
+      const targetScroll = Math.max(currentScroll - pageSize, 0);
+      container.scrollTo({ top: targetScroll, behavior: 'smooth' });
     }
   }, [currentPage, totalPages, isFirstChapter, isLastChapter, onNextChapter, onPrevChapter, isAnimating, settings.pageLayout]);
 
@@ -320,6 +369,8 @@ const ReaderView = React.memo(({
         case 'ArrowLeft':
         case 'ArrowUp':
         case 'PageUp':
+        case 'h': // Vim-style navigation
+        case 'k':
           e.preventDefault();
           navigatePage('prev');
           break;
@@ -327,8 +378,21 @@ const ReaderView = React.memo(({
         case 'ArrowDown':
         case 'PageDown':
         case ' ':
+        case 'j': // Vim-style navigation
+        case 'l':
           e.preventDefault();
           navigatePage('next');
+          break;
+        case 'Home':
+          e.preventDefault();
+          containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+          break;
+        case 'End':
+          e.preventDefault();
+          if (containerRef.current) {
+            const { scrollHeight, clientHeight } = containerRef.current;
+            containerRef.current.scrollTo({ top: scrollHeight - clientHeight, behavior: 'smooth' });
+          }
           break;
       }
     };
@@ -383,6 +447,13 @@ const ReaderView = React.memo(({
     return () => document.removeEventListener('selectionchange', handleSelection);
   }, [handleTextSelection, onHighlight]);
 
+  // Handle highlight click
+  const handleHighlightClick = useCallback((highlight: Highlight) => {
+    // Could emit event or show highlight details
+    console.log('Highlight clicked:', highlight);
+    // Future: Show highlight details modal or context menu
+  }, []);
+
   // Apply content and highlights
   useEffect(() => {
     if (!contentRef.current) return;
@@ -399,14 +470,22 @@ const ReaderView = React.memo(({
     contentRef.current.innerHTML = cleanContent;
     
     if (highlights.length > 0) {
-      renderHighlights(contentRef.current, highlights);
+      renderHighlights(contentRef.current, highlights, handleHighlightClick);
     }
     
+<<<<<<< HEAD
     // Reset to first page and calculate pages when content changes
     setCurrentPage(0);
     setIsAnimating(false);
     setTimeout(() => calculatePages(), 100); // Allow layout to settle
   }, [cleanContent, highlights, calculatePages]);
+=======
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+      updateScrollPosition();
+    }
+  }, [cleanContent, highlights, updateScrollPosition, handleHighlightClick]);
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
 
   // Calculate pages on resize with debouncing
   useEffect(() => {
@@ -453,15 +532,24 @@ const ReaderView = React.memo(({
   return (
     <div
       className={classNames(
+<<<<<<< HEAD
         'h-full relative overflow-hidden',
         themeClasses[settings.theme],
         getAnimationContainerClasses()
+=======
+        'h-full overflow-y-auto overflow-x-hidden scroll-smooth',
+        'relative', // For proper positioning
+        themeClasses[settings.theme]
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
       )}
       style={{
         fontSize: `${settings.fontSize}px`,
         fontFamily: settings.fontFamily,
         lineHeight: settings.lineHeight,
-        letterSpacing: `${settings.letterSpacing}px`
+        letterSpacing: `${settings.letterSpacing}px`,
+        // Ensure proper scrolling behavior
+        scrollBehavior: 'smooth',
+        overscrollBehavior: 'contain'
       }}
     >
       <div
@@ -510,10 +598,13 @@ const ReaderView = React.memo(({
             'selection:bg-blue-200 dark:selection:bg-blue-800'
           )}
           style={{
-            padding: `${settings.marginSize * 1.5}px ${capabilities.isSmallScreen ? settings.marginSize : settings.marginSize * 2}px`,
+            paddingTop: `${settings.marginSize * 1.5}px`,
+            paddingLeft: `${capabilities.isSmallScreen ? settings.marginSize : settings.marginSize * 2}px`,
+            paddingRight: `${capabilities.isSmallScreen ? settings.marginSize : settings.marginSize * 2}px`,
             paddingBottom: `${settings.marginSize * 3}px`,
             maxWidth: settings.readingMode === 'normal' ? '100%' : settings.readingMode === 'focus' ? '75ch' : '65ch',
             margin: '0 auto',
+<<<<<<< HEAD
             ...(settings.pageLayout === 'single' ? {
               // CSS columns will be set dynamically in calculatePages
               minHeight: '100vh',
@@ -534,6 +625,55 @@ const ReaderView = React.memo(({
           <div className={styles.pageCurl} />
         )}
         
+=======
+            minHeight: 'calc(100vh - 120px)' // Account for controls and ensure proper pagination
+          }}
+        />
+        
+        {/* Pagination Indicators */}
+        <div className={classNames(
+          'fixed left-1/2 transform -translate-x-1/2 z-30 transition-opacity duration-300',
+          {
+            'bottom-4': !capabilities.isSmallScreen,
+            'bottom-20': capabilities.isSmallScreen, // Account for mobile browser UI
+            'opacity-0 pointer-events-none': settings.readingMode === 'immersive' && !capabilities.isTouchDevice
+          }
+        )}>
+          <div className="flex items-center gap-2 bg-black/20 dark:bg-white/20 backdrop-blur-sm rounded-full px-3 py-1.5 text-xs text-white dark:text-gray-200 shadow-lg">
+            <span className="font-medium">Page {Math.floor(_chapterProgress / 10) + 1}</span>
+            <div className={classNames(
+              'bg-white/30 rounded-full overflow-hidden',
+              capabilities.isSmallScreen ? 'w-12 h-1' : 'w-16 h-1'
+            )}>
+              <div 
+                className="h-full bg-white transition-all duration-300 ease-out"
+                style={{ width: `${Math.max(1, _chapterProgress)}%` }}
+              />
+            </div>
+            <span className="text-white/70 font-medium">{Math.round(_chapterProgress)}%</span>
+          </div>
+        </div>
+
+        {/* Swipe Hint for Mobile Users */}
+        {showSwipeHint && capabilities.isTouchDevice && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 mx-4 max-w-sm text-center shadow-xl">
+              <div className="text-2xl mb-3">👆</div>
+              <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
+                Swipe to Navigate
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">
+                Swipe left or right to turn pages, or tap the sides of the screen
+              </p>
+              <div className="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
+                <span>← Previous</span>
+                <span>Next →</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+>>>>>>> 887e3a3 (feat: implement premium image optimization and enhanced UX experience)
         {/* Highlight Color Picker */}
         {showColorPicker && colorPickerPosition && (
           <HighlightColorPicker

@@ -116,8 +116,8 @@ const SettingsModal = React.memo(({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Page Layout
             </label>
-            <div className="flex gap-2">
-              {(['single', 'double', 'continuous'] as const).map(layout => (
+            <div className="grid grid-cols-2 gap-2">
+              {(['single', 'double', 'continuous', 'paginated'] as const).map(layout => (
                 <button
                   key={layout}
                   onClick={() => onUpdateSettings({ pageLayout: layout })}
@@ -129,10 +129,15 @@ const SettingsModal = React.memo(({
                     }
                   )}
                 >
-                  {layout === 'single' ? 'Single Page' : layout === 'double' ? 'Double Page' : 'Continuous'}
+                  {layout === 'single' ? 'Single Page' : 
+                   layout === 'double' ? 'Double Page' : 
+                   layout === 'continuous' ? 'Continuous' : 'Paginated'}
                 </button>
               ))}
             </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Paginated: Advanced page-based navigation with smart content flow
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

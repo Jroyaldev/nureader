@@ -189,7 +189,7 @@ const HighlightsModal = React.memo(({
                         onClick={() => onSelect(highlight.chapterIndex, highlight.startOffset)}
                       >
                         <p className="text-gray-900 dark:text-gray-100">
-                          "{highlight.text}"
+                          &quot;{highlight.text}&quot;
                         </p>
                       </div>
 

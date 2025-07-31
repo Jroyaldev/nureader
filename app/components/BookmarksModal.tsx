@@ -78,15 +78,15 @@ const BookmarksModal = React.memo(({
               >
                 <div className="flex items-start justify-between mb-3">
                   <button
-                    onClick={() => onSelect(bookmark.chapterIndex, bookmark.position)}
+                    onClick={() => onSelect(bookmark.chapterIndex, bookmark.chapterProgress)}
                     className="flex-1 text-left"
                   >
                     <div className="font-medium text-gray-900 dark:text-gray-100 mb-1">
                       {chapters[bookmark.chapterIndex]?.title || `Chapter ${bookmark.chapterIndex + 1}`}
                     </div>
                     <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(bookmark.createdAt).toLocaleDateString()} • 
-                      Position {bookmark.position}%
+                      {new Date(bookmark.createdAt).toLocaleDateString()} •
+                      Position {bookmark.chapterProgress}%
                     </div>
                   </button>
                   <button

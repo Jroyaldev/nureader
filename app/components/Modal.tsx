@@ -3,7 +3,7 @@
 import React, { useEffect, useCallback } from 'react';
 import { IoClose } from 'react-icons/io5';
 import classNames from 'classnames';
-import { useMobileCapabilities } from './useMobileTouch';
+import { useMobileCapabilities } from '../hooks/useMobileTouch';
 
 interface ModalProps {
   title: string;

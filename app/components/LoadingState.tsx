@@ -9,13 +9,17 @@ interface LoadingStateProps {
   stage: string;
   showSkeleton?: boolean;
   variant?: 'default' | 'content' | 'minimal';
+  details?: string;
+  estimatedTime?: number;
 }
 
 const LoadingState = React.memo(({ 
   progress, 
   stage, 
   showSkeleton = false, 
-  variant = 'default' 
+  variant = 'default',
+  details,
+  estimatedTime
 }: LoadingStateProps) => {
   // Show content skeleton for a more realistic preview
   if (showSkeleton) {
@@ -37,9 +41,19 @@ const LoadingState = React.memo(({
         <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
           Loading Your Book
         </h3>
-        <p className="text-gray-600 dark:text-gray-400 mb-6">
+        <p className="text-gray-600 dark:text-gray-400 mb-2">
           {stage}
         </p>
+        {details && (
+          <p className="text-sm text-gray-500 dark:text-gray-500 mb-4">
+            {details}
+          </p>
+        )}
+        {estimatedTime && (
+          <p className="text-xs text-gray-400 dark:text-gray-600 mb-6">
+            Estimated time: {estimatedTime}s remaining
+          </p>
+        )}
 
         {/* Progress Bar */}
         <div className="w-full max-w-xs mx-auto">
